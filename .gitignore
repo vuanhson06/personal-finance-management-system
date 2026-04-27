@@ -1,0 +1,14 @@
+# Python rác
+__pycache__/
+*.py[cod]
+venv/
+
+# Database & Bảo mật (Project 13)
+.env
+*.sql_history
+*.log
+
+# IDE rác
+.vscode/
+.idea/
+.antigravity/
