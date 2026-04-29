@@ -220,6 +220,14 @@ class BankAccount(Base):
     AccountName: Mapped[str] = mapped_column(
         "AccountName", String(100), nullable=False
     )
+    AccountNumber: Mapped[str] = mapped_column(
+        "AccountNumber",
+        String(20),
+        nullable=False,
+        unique=True,
+        index=True,
+        comment="Unique external account identifier. Webhook bank_sub_acc_id maps to this.",
+    )
     Balance: Mapped[Decimal] = mapped_column(
         "Balance", Numeric(15, 2), nullable=False, default=Decimal("0.00")
     )
@@ -249,6 +257,7 @@ class BankAccount(Base):
     def __repr__(self) -> str:
         return (
             f"<BankAccount id={self.AccountID} "
+            f"number='{self.AccountNumber}' "
             f"name='{self.AccountName}' balance={self.Balance}>"
         )
 
@@ -524,6 +533,14 @@ class Income(Base):
     Description: Mapped[Optional[str]] = mapped_column(
         "Description", Text, nullable=True
     )
+    ExternalTransID: Mapped[Optional[str]] = mapped_column(
+        "ExternalTransID",
+        String(255),
+        nullable=True,
+        unique=True,
+        index=True,
+        comment="Idempotency key from inbound Webhook payload (bank_transaction_id).",
+    )
     CreatedAt: Mapped[datetime] = mapped_column(
         "CreatedAt", DateTime, nullable=False, server_default=func.now()
     )
@@ -601,6 +618,14 @@ class Expense(Base):
     )
     Description: Mapped[Optional[str]] = mapped_column(
         "Description", Text, nullable=True
+    )
+    ExternalTransID: Mapped[Optional[str]] = mapped_column(
+        "ExternalTransID",
+        String(255),
+        nullable=True,
+        unique=True,
+        index=True,
+        comment="Idempotency key from inbound Webhook payload (bank_transaction_id).",
     )
     CreatedAt: Mapped[datetime] = mapped_column(
         "CreatedAt", DateTime, nullable=False, server_default=func.now()

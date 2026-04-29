@@ -17,9 +17,11 @@ CREATE TABLE IF NOT EXISTS BankAccounts (
     AccountID INT AUTO_INCREMENT PRIMARY KEY,
     UserID INT NOT NULL,
     AccountName VARCHAR(100) NOT NULL,
+    AccountNumber VARCHAR(20) NOT NULL,
     Balance DECIMAL(15,2) DEFAULT 0.00,
     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY idx_bankaccount_number (AccountNumber),
     FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS SystemCategories (
@@ -67,7 +69,9 @@ CREATE TABLE IF NOT EXISTS Income (
     Amount DECIMAL(15,2) NOT NULL CHECK (Amount > 0),
     TransactionDate DATE NOT NULL,
     Description TEXT,
+    ExternalTransID VARCHAR(255) NULL,
     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY idx_income_ext_trans_id (ExternalTransID),
     FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE,
     FOREIGN KEY (AccountID) REFERENCES BankAccounts(AccountID) ON DELETE CASCADE,
     FOREIGN KEY (CategoryID) REFERENCES Categories(CategoryID) ON DELETE CASCADE
@@ -81,7 +85,9 @@ CREATE TABLE IF NOT EXISTS Expenses (
     Amount DECIMAL(15,2) NOT NULL CHECK (Amount > 0),
     TransactionDate DATE NOT NULL,
     Description TEXT,
+    ExternalTransID VARCHAR(255) NULL,
     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY idx_expense_ext_trans_id (ExternalTransID),
     FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE,
     FOREIGN KEY (AccountID) REFERENCES BankAccounts(AccountID) ON DELETE CASCADE,
     FOREIGN KEY (CategoryID) REFERENCES Categories(CategoryID) ON DELETE CASCADE
@@ -91,6 +97,7 @@ INSERT INTO SystemCategories (CategoryName, Type) VALUES
 ('Salary', 'Income'),
 ('Bonus', 'Income'),
 ('Investment', 'Income'),
+('Others', 'Income'),
 ('Housing', 'Expense'),
 ('Utilities', 'Expense'),
 ('Food & Dining', 'Expense'),
@@ -100,7 +107,8 @@ INSERT INTO SystemCategories (CategoryName, Type) VALUES
 ('Entertainment', 'Expense'),
 ('Shopping', 'Expense'),
 ('Debt', 'Expense'),
-('Savings', 'Expense');
+('Savings', 'Expense'),
+('Others', 'Expense');
 
 DELIMITER $$
 CREATE PROCEDURE InitializeUserCategories(IN p_UserID INT)

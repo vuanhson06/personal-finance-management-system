@@ -308,9 +308,13 @@ def seed_users(db: Session) -> list[User]:
 def seed_bank_accounts(db: Session, users: list[User]) -> list[BankAccount]:
     """
     Creates 2 BankAccount records per User (Checking + Savings) with a
-    randomized initial balance. The opening balance is set directly here
-    since no Income/Expense transaction triggers it — this represents
-    the account's starting state before any transactions.
+    randomized initial balance and a unique, deterministic AccountNumber.
+
+    AccountNumber format: '190' + user_index (1-digit) +
+                          account_index (1-digit) + 9 random digits
+    Example: '19011234567890' (14 digits total)
+    This is deterministic given RANDOM_SEED = 42 and safe from collisions
+    within the 5-user, 2-account-per-user seed dataset.
 
     Args:
         db:    An active SQLAlchemy Session.
@@ -321,11 +325,15 @@ def seed_bank_accounts(db: Session, users: list[User]) -> list[BankAccount]:
     """
     print("  🏦 Seeding bank accounts...")
     accounts: list[BankAccount] = []
-    for user in users:
-        for account_name, low, high in ACCOUNT_TYPES:
+    for user_idx, user in enumerate(users, start=1):
+        for acc_idx, (account_name, low, high) in enumerate(ACCOUNT_TYPES, start=1):
+            # Deterministic unique account number: 190{user_idx}{acc_idx}{9 random digits}
+            suffix: str = str(random.randint(100_000_000, 999_999_999))
+            account_number: str = f"190{user_idx}{acc_idx}{suffix}"
             account = BankAccount(
                 UserID=user.UserID,
                 AccountName=account_name,
+                AccountNumber=account_number,
                 Balance=_random_decimal(float(low), float(high)),
             )
             db.add(account)

@@ -56,6 +56,9 @@ class Settings:
     db_password: str = field(default_factory=lambda: _require_env("DB_PASSWORD"))
     db_name: str = field(default_factory=lambda: _require_env("DB_NAME"))
 
+    # --- Webhook Security ---
+    webhook_api_key: str = field(default_factory=lambda: _require_env("WEBHOOK_API_KEY"))
+
     @property
     def database_url(self) -> str:
         """

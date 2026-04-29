@@ -63,9 +63,15 @@
 - Build a service using `yfinance` to fetch live prices (Stock, Gold, Crypto).
 - Implement basic caching to avoid API rate limits.
 
-### Step 5: Logic Engine Development
+### Step 5: Logic Engine & Webhook Simulator (Bank Sync)
 - Build core scripts for transaction CRUD, categorization, and balance tracking.
-- Develop "Bank Sync Simulation" function.
+- **Upgrade Bank Sync to Webhook Simulator:** Expose a real HTTP POST endpoint (Flask) to receive structured JSON payloads representing external bank transactions — replacing the old random-data simulation.
+- **Idempotency Protocol:** Every inbound payload must carry a unique `bank_transaction_id` (stored as `ExternalTransID`). The system checks this field in both `Income` and `Expenses` tables before processing to prevent duplicate entries (Anti-Double Spending). A duplicate returns `200 OK` silently.
+- **Security Protocol:** The Webhook endpoint must be protected by an `X-API-KEY` request header. Requests with a missing or invalid key are rejected with `401 Unauthorized`. The valid key is stored in `.env` (never hardcoded).
+- **Account Number Mapping:** The `BankAccounts` table MUST include an `AccountNumber` column (`VARCHAR(20)`, `NOT NULL`, `UNIQUE`). The Webhook payload field `bank_sub_acc_id` maps directly to `BankAccounts.AccountNumber` — this is the authoritative external key for account resolution.
+- **Auto-Mapping Logic:** The backend resolves `AccountID` and `UserID` dynamically by querying `BankAccounts.AccountNumber = bank_sub_acc_id`. `UserID` is taken exclusively from the matched DB record — never from the payload.
+- **Transaction Direction:** Positive `amount` → Income; Negative `amount` → Expense. Absolute value is stored; direction is resolved by the processing logic, not the caller.
+- **"Others" Fallback Categorization:** Webhook-sourced transactions must never be assigned to an arbitrary first-available category. The processor must look up the user's category named `"Others"` (matching the correct transaction type). If found, that category is used. If the `"Others"` category does not yet exist for that user, the transaction is still committed using the user's first available category of the correct type as a last-resort fallback — ensuring no transaction is ever silently dropped. The `SystemCategories` table must include `"Others"` entries for both `Income` and `Expense` types so that all new users receive them automatically via the `After_User_Insert` trigger.
 
 ---
 

@@ -210,6 +210,7 @@ def add_income(
     transaction_date: date,
     db: Session,
     description: Optional[str] = None,
+    external_trans_id: Optional[str] = None,
 ) -> Income:
     """
     Validates and inserts a new Income transaction for the user.
@@ -231,6 +232,9 @@ def add_income(
         transaction_date: The date the income was received.
         db:               An active SQLAlchemy Session.
         description:      Optional text description.
+        external_trans_id: Optional idempotency key from a Webhook payload
+                           (stored as ExternalTransID). Defaults to None for
+                           manually entered transactions.
 
     Returns:
         The newly created and persisted Income ORM object.
@@ -252,6 +256,7 @@ def add_income(
             Amount=amount,
             TransactionDate=transaction_date,
             Description=description,
+            ExternalTransID=external_trans_id,
         )
         db.add(income)
         db.commit()
@@ -276,6 +281,7 @@ def add_expense(
     transaction_date: date,
     db: Session,
     description: Optional[str] = None,
+    external_trans_id: Optional[str] = None,
 ) -> Expense:
     """
     Validates and inserts a new Expense transaction for the user.
@@ -297,6 +303,9 @@ def add_expense(
         transaction_date: The date the expense occurred.
         db:               An active SQLAlchemy Session.
         description:      Optional text description.
+        external_trans_id: Optional idempotency key from a Webhook payload
+                           (stored as ExternalTransID). Defaults to None for
+                           manually entered transactions.
 
     Returns:
         The newly created and persisted Expense ORM object.
@@ -318,6 +327,7 @@ def add_expense(
             Amount=amount,
             TransactionDate=transaction_date,
             Description=description,
+            ExternalTransID=external_trans_id,
         )
         db.add(expense)
         db.commit()
