@@ -47,6 +47,14 @@
 ## Part 2: Backend (The Brain)
 *Focus: Bridging the database to the interface using modern Python logic.*
 
+> ### ⚠️ Cross-Cutting Policy: Strict Balance Integrity
+> **No operation — whether a manual Expense, a Webhook-sourced transaction, or a Saving Goal Contribution — shall be permitted to result in `BankAccounts.Balance < 0`.**
+>
+> Enforcement is mandatory at **two independent layers**:
+> - **Application Layer (Python):** `transaction_service.add_expense()` must perform an "Insufficient Funds" pre-check against `BankAccounts.Balance` before committing any Expense. This is the primary guard — fast, provides a clear error message to the caller.
+> - **Database Layer (SQL):** `BEFORE INSERT` and `BEFORE UPDATE` triggers on the `Expenses` table must act as the last line of defense by raising `SIGNAL SQLSTATE '45000'` if the resulting balance would be negative. Additionally, `BankAccounts.Balance` must carry a `CHECK (Balance >= 0)` column constraint.
+> - **Cascading Coverage:** Because all expenditure paths (`add_expense()`, Webhook processor, `saving_service.contribute_to_goal()`) delegate to `transaction_service.add_expense()`, adding the check there provides protection for all callers automatically.
+
 ### Step 1: Connectivity & Security Setup
 - Configure SQLAlchemy engine with connection pooling and basic error handling for MySQL connection.
 - Implement `.env` file management for DB credentials and API keys.
@@ -72,6 +80,20 @@
 - **Auto-Mapping Logic:** The backend resolves `AccountID` and `UserID` dynamically by querying `BankAccounts.AccountNumber = bank_sub_acc_id`. `UserID` is taken exclusively from the matched DB record — never from the payload.
 - **Transaction Direction:** Positive `amount` → Income; Negative `amount` → Expense. Absolute value is stored; direction is resolved by the processing logic, not the caller.
 - **"Others" Fallback Categorization:** Webhook-sourced transactions must never be assigned to an arbitrary first-available category. The processor must look up the user's category named `"Others"` (matching the correct transaction type). If found, that category is used. If the `"Others"` category does not yet exist for that user, the transaction is still committed using the user's first available category of the correct type as a last-resort fallback — ensuring no transaction is ever silently dropped. The `SystemCategories` table must include `"Others"` entries for both `Income` and `Expense` types so that all new users receive them automatically via the `After_User_Insert` trigger.
+
+### Step 6: Saving Goals System
+*Focus: Manual, transaction-based goal tracking with full auditability.*
+
+- **SavingGoals Table:** Define a `SavingGoals` entity with `GoalID`, `UserID`, `GoalName`, `TargetAmount`, `CurrentAmount` (default `0.00`), `Deadline` (nullable `DATE`), and `Status` (ENUM `Active`/`Completed`).
+- **Reserved System Categories:** Two categories are permanently reserved for goal operations and must exist in `SystemCategories`:
+  - `Savings` (Type: `Expense`) — Used to move money **from** a bank account **into** a goal. Balance decreases via trigger.
+  - `Savings Withdraw` (Type: `Income`) — Used to return money **from** a goal **back to** a bank account. Balance increases via trigger.
+  - ⚠️ `Savings (Expense)` is already seeded. Only `Savings Withdraw (Income)` must be added.
+- **Contribute Flow:** `contribute_to_goal()` creates an `Expense` (Category: `Savings`) → SQL trigger decrements bank balance → Python increments `SavingGoals.CurrentAmount`.
+- **Withdraw Flow:** `withdraw_from_goal()` creates an `Income` (Category: `Savings Withdraw`) → SQL trigger increments bank balance → Python decrements `SavingGoals.CurrentAmount`.
+- **Completion Rule:** When `CurrentAmount >= TargetAmount`, the goal status is automatically updated to `Completed`. Withdrawals revert status to `Active` if the amount drops below target.
+- **Category Auto-Resolution:** Users never select a category manually for goal operations; the service resolves `Savings` or `Savings Withdraw` by name from the user's own `Categories` table.
+- **Data Integrity:** `CurrentAmount` is never allowed to go negative. All validation occurs before the transaction record is created.
 
 ---
 

@@ -91,7 +91,8 @@ def receive_transaction() -> tuple[Response, int]:
         2. Parse JSON body            → 400 if malformed.
         3. Delegate to service        → process_webhook_payload().
         4. Map service response code  → HTTP status.
-        5. Guard with outer try-except → 500 on unexpected failure.
+        5. Insufficient funds error   → 422 INSUFFICIENT_FUNDS.
+        6. Guard with outer try-except → 500 on unexpected failure.
 
     Returns:
         A Flask JSON response tuple: (response_body, http_status_code).
@@ -128,8 +129,30 @@ def receive_transaction() -> tuple[Response, int]:
         response_body = {k: v for k, v in result.items() if k != "code"}
         return jsonify(response_body), http_code
 
+    except ValueError as e:
+        # --- Step 5: Insufficient Funds or invalid business rule ---
+        msg: str = str(e)
+        if "Insufficient funds" in msg:
+            logger.warning(
+                "Webhook rejected (insufficient funds) for tx_id='%s': %s",
+                payload.get("bank_transaction_id", "<unknown>"), msg,
+            )
+            return jsonify({
+                "status": "INSUFFICIENT_FUNDS",
+                "detail": msg,
+            }), 422
+        # Any other ValueError from the service layer (e.g. schema mismatch)
+        logger.warning(
+            "Webhook ValueError for tx_id='%s': %s",
+            payload.get("bank_transaction_id", "<unknown>"), msg,
+        )
+        return jsonify({
+            "status": "INVALID_REQUEST",
+            "detail":  msg,
+        }), 400
+
     except Exception as e:
-        # --- Step 5: Outer safety net — no stack trace in response ---
+        # --- Step 6: Outer safety net — no stack trace in response ---
         logger.error(
             "Unhandled exception in webhook handler for tx_id='%s': %s",
             payload.get("bank_transaction_id", "<unknown>"), e,
@@ -141,6 +164,7 @@ def receive_transaction() -> tuple[Response, int]:
 
     finally:
         db.close()
+
 
 
 # =============================================================================

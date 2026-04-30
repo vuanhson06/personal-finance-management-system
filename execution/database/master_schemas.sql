@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS BankAccounts (
     UserID INT NOT NULL,
     AccountName VARCHAR(100) NOT NULL,
     AccountNumber VARCHAR(20) NOT NULL,
-    Balance DECIMAL(15,2) DEFAULT 0.00,
+    Balance DECIMAL(15,2) DEFAULT 0.00 CHECK (Balance >= 0),
     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY idx_bankaccount_number (AccountNumber),
@@ -93,10 +93,26 @@ CREATE TABLE IF NOT EXISTS Expenses (
     FOREIGN KEY (CategoryID) REFERENCES Categories(CategoryID) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS SavingGoals (
+    GoalID        INT AUTO_INCREMENT PRIMARY KEY,
+    UserID        INT NOT NULL,
+    GoalName      VARCHAR(255) NOT NULL,
+    TargetAmount  DECIMAL(15,2) NOT NULL CHECK (TargetAmount > 0),
+    CurrentAmount DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+    Deadline      DATE NULL,
+    Status        ENUM('Active', 'Completed') NOT NULL DEFAULT 'Active',
+    CreatedAt     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt     TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_savinggoals_user ON SavingGoals (UserID, Status);
+
 INSERT INTO SystemCategories (CategoryName, Type) VALUES
 ('Salary', 'Income'),
 ('Bonus', 'Income'),
 ('Investment', 'Income'),
+('Savings Withdraw', 'Income'),
 ('Others', 'Income'),
 ('Housing', 'Expense'),
 ('Utilities', 'Expense'),
@@ -164,6 +180,48 @@ BEGIN
     UPDATE BankAccounts 
     SET Balance = Balance - OLD.Amount 
     WHERE AccountID = OLD.AccountID;
+END$$
+DELIMITER ;
+
+DROP TRIGGER IF EXISTS Before_Expense_Insert;
+DELIMITER $$
+CREATE TRIGGER Before_Expense_Insert
+BEFORE INSERT ON Expenses
+FOR EACH ROW
+BEGIN
+    DECLARE current_balance DECIMAL(15,2);
+    SELECT Balance INTO current_balance
+    FROM BankAccounts
+    WHERE AccountID = NEW.AccountID;
+    IF current_balance < NEW.Amount THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Insufficient funds: transaction would result in negative balance.';
+    END IF;
+END$$
+DELIMITER ;
+
+DROP TRIGGER IF EXISTS Before_Expense_Update;
+DELIMITER $$
+CREATE TRIGGER Before_Expense_Update
+BEFORE UPDATE ON Expenses
+FOR EACH ROW
+BEGIN
+    DECLARE current_balance DECIMAL(15,2);
+    IF NEW.AccountID = OLD.AccountID AND NEW.Amount > OLD.Amount THEN
+        SELECT Balance INTO current_balance
+        FROM BankAccounts WHERE AccountID = NEW.AccountID;
+        IF current_balance < (NEW.Amount - OLD.Amount) THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Insufficient funds: expense update would result in negative balance.';
+        END IF;
+    ELSEIF NEW.AccountID != OLD.AccountID THEN
+        SELECT Balance INTO current_balance
+        FROM BankAccounts WHERE AccountID = NEW.AccountID;
+        IF current_balance < NEW.Amount THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Insufficient funds: expense account change would result in negative balance.';
+        END IF;
+    END IF;
 END$$
 DELIMITER ;
 

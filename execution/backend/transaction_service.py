@@ -101,6 +101,38 @@ def _assert_account_ownership(
     return account
 
 
+def _assert_sufficient_funds(account: BankAccount, amount: Decimal) -> None:
+    """
+    Ensures a bank account has sufficient funds for a debit operation.
+
+    This is the Application Layer guard (Layer 1 of the two-layer
+    Strict Balance Integrity defense — db_rules.md Section 5,
+    backend_logic_rules.md Section 6).
+
+    Must be called inside add_expense() AFTER _assert_account_ownership()
+    so that the live BankAccount object (with current Balance) is available.
+
+    Do NOT wrap the call in try-except — let the ValueError propagate
+    cleanly to the caller (Webhook server, saving_service, frontend handler)
+    so each caller can format the appropriate user-facing response.
+
+    Args:
+        account: The verified BankAccount ORM object with live Balance.
+        amount:  The debit amount to validate against the current balance.
+
+    Raises:
+        ValueError: If account.Balance < amount, with a clear message
+                    containing "Insufficient funds" (used by webhook_server.py
+                    to detect and return HTTP 422).
+    """
+    if account.Balance < amount:
+        raise ValueError(
+            f"Insufficient funds: account {account.AccountID} has balance "
+            f"{account.Balance}, but the requested debit is {amount}. "
+            f"Transaction would result in a negative balance."
+        )
+
+
 def _assert_category_ownership(
     category_id: int, user_id: int, expected_type: TransactionType, db: Session
 ) -> Category:
@@ -316,7 +348,8 @@ def add_expense(
     """
     _validate_amount(amount)
     _validate_date(transaction_date)
-    _assert_account_ownership(account_id, user_id, db)
+    account = _assert_account_ownership(account_id, user_id, db)
+    _assert_sufficient_funds(account, amount)          # Layer 1: balance guard
     _assert_category_ownership(category_id, user_id, TransactionType.Expense, db)
 
     try:

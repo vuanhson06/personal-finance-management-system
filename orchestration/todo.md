@@ -374,5 +374,248 @@ This picks whichever category the database returns first (ORDER BY PK), which is
 
 **No other files require changes.** `seed.py` is unaffected because category creation is delegated entirely to the `After_User_Insert` trigger + `InitializeUserCategories` stored procedure, which reads from `SystemCategories`. Re-running `seed.py` after a schema re-run will automatically give all seeded users "Others" in both types.
 
+---
+
+## Part 2, Step 6: Saving Goals System
+
+**Goal**: Implement a manual, transaction-based Saving Goals system. Each monetary movement between a bank account and a goal is recorded as a standard Income or Expense transaction using reserved system categories (`Savings` and `Savings Withdraw`), ensuring SQL triggers keep bank balances accurate and all goal activity is fully auditable. As defined in `PROJECT_PLAN.md` (Part 2, Step 6), `directives/db_rules.md` (Sections 1–3), and `directives/backend_logic_rules.md` (Section 5).
+
+**Status: ✅ COMPLETE**
+
+**Key Design Decisions:**
+- `SavingGoals.CurrentAmount` is managed **by Python** — there are no SQL triggers on this table.
+- `BankAccounts.Balance` is still managed **by SQL triggers** on Income/Expenses — no change.
+- Reserved categories are resolved **by name** at runtime from the user's `Categories` table — no hardcoded IDs.
+- `Savings (Expense)` is **already** in `SystemCategories`. Only `Savings Withdraw (Income)` needs to be inserted.
+
+**Files to be created / modified:**
+
+| Action | File | Change |
+|---|---|---|
+| MODIFY | `execution/database/master_schemas.sql` | Add `SavingGoals` CREATE TABLE + insert `('Savings Withdraw', 'Income')` into `SystemCategories` |
+| MODIFY | `execution/backend/models.py` | Add `SavingGoal` ORM class + `GoalStatus` Enum |
+| CREATE | `execution/backend/saving_service.py` | Full service with goal CRUD + Contribute + Withdraw |
+
+**Proposed Steps for Execution:**
+
+- [ ] **Step SG.1 — SQL Schema (`master_schemas.sql`)**:
+  - Insert `('Savings Withdraw', 'Income')` into the `SystemCategories` INSERT block.
+    - ⚠️ `('Savings', 'Expense')` is ALREADY present — do NOT duplicate it.
+  - Add the following `CREATE TABLE` definition after `MonthlyClosures`:
+    ```sql
+    CREATE TABLE IF NOT EXISTS SavingGoals (
+        GoalID        INT AUTO_INCREMENT PRIMARY KEY,
+        UserID        INT NOT NULL,
+        GoalName      VARCHAR(255) NOT NULL,
+        TargetAmount  DECIMAL(15,2) NOT NULL CHECK (TargetAmount > 0),
+        CurrentAmount DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+        Deadline      DATE NULL,
+        Status        ENUM('Active', 'Completed') NOT NULL DEFAULT 'Active',
+        CreatedAt     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UpdatedAt     TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE
+    );
+    ```
+  - Add a performance index: `CREATE INDEX idx_savinggoals_user ON SavingGoals (UserID, Status);`
+  - Existing triggers (`After_Income_*`, `After_Expense_*`) are **unaffected** — they only reference `Income` and `Expenses`.
+
+- [ ] **Step SG.2 — ORM Model (`models.py`)**:
+  - Add `GoalStatus` Python Enum: values `Active = "Active"`, `Completed = "Completed"`.
+  - Add `SavingGoal` ORM class mapped to `SavingGoals` table:
+    - `GoalID: Mapped[int]` — PK, autoincrement.
+    - `UserID: Mapped[int]` — FK to `Users(UserID)`, `ondelete="CASCADE"`.
+    - `GoalName: Mapped[str]` — `String(255)`, `nullable=False`.
+    - `TargetAmount: Mapped[Decimal]` — `Numeric(15,2)`, `nullable=False`.
+    - `CurrentAmount: Mapped[Decimal]` — `Numeric(15,2)`, `nullable=False`, `default=Decimal("0.00")`.
+    - `Deadline: Mapped[Optional[date]]` — `Date`, `nullable=True`.
+    - `Status: Mapped[GoalStatus]` — `SAEnum(GoalStatus)`, `nullable=False`, `default=GoalStatus.Active`.
+    - `CreatedAt`, `UpdatedAt` — standard timestamps.
+    - `__table_args__`: `CheckConstraint("TargetAmount > 0")` + `Index("idx_savinggoals_user", "UserID", "Status")`.
+  - Add `saving_goals` relationship to the `User` model (`cascade="all, delete-orphan"`).
+  - Add `user` back-reference to `SavingGoal`.
+
+- [ ] **Step SG.3 — Service Logic (`saving_service.py`)**:
+  - Create `execution/backend/saving_service.py` with:
+
+  **`_resolve_reserved_category(name, type_, user_id, db)` (private helper)**
+  - Queries user's `Categories` WHERE `CategoryName == name` AND `Type == type_`.
+  - Raises `ValueError` with a clear message if not found (no silent fallback for reserved categories).
+
+  **`create_goal(user_id, goal_name, target_amount, db, deadline=None)` → `SavingGoal`**
+  - Validate `target_amount > 0`.
+  - Validate `deadline` is in the future if provided.
+  - Create and commit a `SavingGoal` record with `Status = Active`, `CurrentAmount = 0`.
+
+  **`get_goals(user_id, db, status_filter=None)` → `list[SavingGoal]`**
+  - UserID-scoped query. Optionally filter by `Status` if `status_filter` is provided.
+  - Returns list ordered by `CreatedAt DESC`.
+
+  **`get_goal_by_id(user_id, goal_id, db)` → `SavingGoal`**
+  - UserID-scoped lookup. Raises `ValueError` if not found or not owned.
+
+  **`contribute_to_goal(user_id, goal_id, account_id, amount, db, description=None)` → `dict`**
+  - Step 1: Validate `amount > 0`.
+  - Step 2: Assert goal ownership + `Status == "Active"`.
+  - Step 3: Assert account ownership (call `_assert_account_ownership` from `transaction_service`).
+  - Step 4: Resolve `Savings` (Expense) category via `_resolve_reserved_category`.
+  - Step 5: Call `add_expense(user_id, account_id, category_id, amount, date.today(), db, description)` → trigger fires.
+  - Step 6: `goal.CurrentAmount += amount`.
+  - Step 7: If `goal.CurrentAmount >= goal.TargetAmount` → `goal.Status = GoalStatus.Completed`.
+  - Step 8: `db.commit()`, `db.refresh(goal)`.
+  - Return summary dict with `goal_id`, `new_current_amount`, `status`, `transaction_id`.
+
+  **`withdraw_from_goal(user_id, goal_id, account_id, amount, db, description=None)` → `dict`**
+  - Step 1: Validate `amount > 0`.
+  - Step 2: Assert goal ownership.
+  - Step 3: Assert `amount <= goal.CurrentAmount` (prevent negative balance).
+  - Step 4: Assert account ownership.
+  - Step 5: Resolve `Savings Withdraw` (Income) category via `_resolve_reserved_category`.
+  - Step 6: Call `add_income(user_id, account_id, category_id, amount, date.today(), db, description)` → trigger fires.
+  - Step 7: `goal.CurrentAmount -= amount`.
+  - Step 8: If `goal.Status == Completed` and `goal.CurrentAmount < goal.TargetAmount` → revert to `Active`.
+  - Step 9: `db.commit()`, `db.refresh(goal)`.
+  - Return summary dict with `goal_id`, `new_current_amount`, `status`, `transaction_id`.
+
+  **`delete_goal(user_id, goal_id, db)` → `None`**
+  - Assert goal ownership.
+  - Assert `CurrentAmount == 0` (must withdraw all funds before deleting).
+  - Delete record and commit.
+
+---
+
+## Critical Fix: Strict Balance Integrity
+
+**Goal**: Eliminate the critical flaw where an Expense (manual, Webhook, or Saving Goal Contribution) can exceed `BankAccounts.Balance` and push it negative. Enforce a non-negotiable "no negative balance" policy at two independent layers — the Python service layer (primary fast guard) and the SQL database layer (final atomic guard). As directed by `PROJECT_PLAN.md` (Part 2 Policy Block), `directives/db_rules.md` (Section 5), and `directives/backend_logic_rules.md` (Section 6).
+
+**Status: ✅ COMPLETE**
+
+**Root Cause (Confirmed from source code):**
+1. `BankAccounts.Balance DECIMAL(15,2) DEFAULT 0.00` — **no `CHECK (Balance >= 0)` constraint** (line 21, `master_schemas.sql`).
+2. `After_Expense_Insert` trigger does `SET Balance = Balance - NEW.Amount` blindly — **no pre-check**.
+3. `add_expense()` in `transaction_service.py` (lines 317–320) validates amount, date, ownership, and category — but **never checks if `account.Balance >= amount`**.
+4. All three expenditure paths (`add_expense()` direct, Webhook processor, `saving_service.contribute_to_goal()`) share this vulnerability.
+
+**Two-Layer Defense Strategy:**
+
+```
+[Caller] → add_expense()
+               ↓ Python: _assert_sufficient_funds()  ← Layer 1: Fast, clear error
+               ↓ db.add(expense); db.commit()
+               ↓ SQL: BEFORE INSERT trigger fires    ← Layer 2: Atomic DB guard
+               ↓ AFTER INSERT trigger fires → Balance updated
+```
+
+**Files to be modified:**
+
+| Action | File | Change |
+|---|---|---|
+| MODIFY | `execution/database/master_schemas.sql` | Add `CHECK (Balance >= 0)` to `BankAccounts`; add `BEFORE INSERT` + `BEFORE UPDATE` triggers on `Expenses` |
+| MODIFY | `execution/backend/transaction_service.py` | Add `_assert_sufficient_funds()` helper; call it inside `add_expense()` |
+| MODIFY | `execution/backend/webhook_server.py` | Map `ValueError` with "Insufficient funds" to `HTTP 422` with `{"status": "INSUFFICIENT_FUNDS"}` |
+
+> **`seed.py` — No changes needed.** Seed income ($1,500–$8,000/month) substantially exceeds seed expenses ($20–$1,200/month). With RANDOM_SEED=42, balances remain positive throughout. The new BEFORE trigger will validate this automatically at seed time.
+> **`saving_service.py` — No changes needed.** `contribute_to_goal()` already delegates to `add_expense()` — it inherits the protection for free.
+
+**Proposed Steps for Execution:**
+
+- [ ] **Step BI.1 — SQL Schema: `CHECK` constraint (`master_schemas.sql`)**:
+  - Modify `BankAccounts` table definition to add:
+    ```sql
+    Balance DECIMAL(15,2) DEFAULT 0.00 CHECK (Balance >= 0),
+    ```
+  - This is the last-resort hard constraint. If the Python layer and BEFORE trigger both fail to catch a case, MySQL will reject the UPDATE outright with an `IntegrityError`.
+
+- [ ] **Step BI.2 — SQL: `BEFORE INSERT` trigger on `Expenses` (`master_schemas.sql`)**:
+  - Add a new `BEFORE INSERT` trigger **before** the existing `After_Expense_Insert` trigger:
+    ```sql
+    DROP TRIGGER IF EXISTS Before_Expense_Insert;
+    DELIMITER $$
+    CREATE TRIGGER Before_Expense_Insert
+    BEFORE INSERT ON Expenses
+    FOR EACH ROW
+    BEGIN
+        DECLARE current_balance DECIMAL(15,2);
+        SELECT Balance INTO current_balance
+        FROM BankAccounts
+        WHERE AccountID = NEW.AccountID;
+        IF current_balance < NEW.Amount THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Insufficient funds: transaction would result in negative balance.';
+        END IF;
+    END$$
+    DELIMITER ;
+    ```
+  - This fires **atomically within the same DB transaction** that commits the Expense row, preventing race conditions.
+
+- [ ] **Step BI.3 — SQL: `BEFORE UPDATE` trigger on `Expenses` (`master_schemas.sql`)**:
+  - Add a new `BEFORE UPDATE` trigger to guard against amount increases or account changes:
+    ```sql
+    DROP TRIGGER IF EXISTS Before_Expense_Update;
+    DELIMITER $$
+    CREATE TRIGGER Before_Expense_Update
+    BEFORE UPDATE ON Expenses
+    FOR EACH ROW
+    BEGIN
+        DECLARE current_balance DECIMAL(15,2);
+        -- Only check if the net debit to the target account increases
+        IF NEW.AccountID = OLD.AccountID AND NEW.Amount > OLD.Amount THEN
+            SELECT Balance INTO current_balance
+            FROM BankAccounts WHERE AccountID = NEW.AccountID;
+            IF current_balance < (NEW.Amount - OLD.Amount) THEN
+                SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Insufficient funds: expense update would result in negative balance.';
+            END IF;
+        ELSEIF NEW.AccountID != OLD.AccountID THEN
+            SELECT Balance INTO current_balance
+            FROM BankAccounts WHERE AccountID = NEW.AccountID;
+            IF current_balance < NEW.Amount THEN
+                SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Insufficient funds: expense account change would result in negative balance.';
+            END IF;
+        END IF;
+    END$$
+    DELIMITER ;
+    ```
+
+- [ ] **Step BI.4 — Python: `_assert_sufficient_funds()` in `transaction_service.py`**:
+  - Add the following private helper after `_assert_account_ownership()`:
+    ```python
+    def _assert_sufficient_funds(account: BankAccount, amount: Decimal) -> None:
+        """
+        Ensures the account has sufficient balance for a debit operation.
+        Raises ValueError with a clear message if balance < amount.
+        This is the Application Layer guard (Layer 1 of two-layer defense).
+        """
+        if account.Balance < amount:
+            raise ValueError(
+                f"Insufficient funds: account {account.AccountID} has "
+                f"balance {account.Balance}, but requested {amount}. "
+                f"Transaction would result in a negative balance."
+            )
+    ```
+  - Modify `add_expense()` — insert the check after `_assert_account_ownership()`:
+    ```python
+    # existing:
+    account = _assert_account_ownership(account_id, user_id, db)
+    # ADD THIS LINE:
+    _assert_sufficient_funds(account, amount)
+    _assert_category_ownership(...)
+    ```
+  - **Do NOT wrap this in try-except inside `add_expense()`** — let the `ValueError` propagate cleanly to the caller.
+
+- [ ] **Step BI.5 — Python: Webhook 422 mapping (`webhook_server.py`)**:
+  - In the `receive_transaction()` route handler, the existing response code mapping handles `200`, `400`, `401`, `404`, and `500`.
+  - Add a specific `ValueError` catch block **before** the generic `Exception` guard:
+    ```python
+    except ValueError as e:
+        msg = str(e)
+        if "Insufficient funds" in msg:
+            return jsonify({"status": "INSUFFICIENT_FUNDS", "detail": msg}), 422
+        return jsonify({"status": "INVALID_REQUEST", "detail": msg}), 400
+    ```
+  - This keeps the Webhook endpoint's error surface clean and returns a meaningful `422` instead of a generic `500`.
+
+
+
 
 

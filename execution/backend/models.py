@@ -65,6 +65,19 @@ class TransactionType(enum.Enum):
     Expense = "Expense"
 
 
+class GoalStatus(enum.Enum):
+    """
+    Defines the two valid lifecycle states for a SavingGoal.
+    Maps to ENUM('Active', 'Completed') on the SavingGoals table.
+
+    Active    : Goal is in progress — contributions are accepted.
+    Completed : CurrentAmount has reached or exceeded TargetAmount.
+                Contributions are blocked until the goal is reset.
+    """
+    Active = "Active"
+    Completed = "Completed"
+
+
 # =============================================================================
 # Model 1: User
 # =============================================================================
@@ -140,6 +153,9 @@ class User(Base):
     )
     expenses: Mapped[list["Expense"]] = relationship(
         "Expense", back_populates="user", cascade="all, delete-orphan"
+    )
+    saving_goals: Mapped[list["SavingGoal"]] = relationship(
+        "SavingGoal", back_populates="user", cascade="all, delete-orphan"
     )
   
     # --- Security Methods ---
@@ -711,4 +727,94 @@ class MonthlyClosure(Base):
             f"<MonthlyClosure id={self.ClosureID} "
             f"account_id={self.AccountID} period='{self.ClosurePeriod}' "
             f"balance={self.ClosingBalance}>"
+        )
+
+
+# =============================================================================
+# Model 10: SavingGoal
+# =============================================================================
+
+class SavingGoal(Base):
+    """
+    ORM model for the `SavingGoals` table.
+
+    Represents a user-defined savings goal with a target amount and a
+    current running total. All monetary movements into and out of a goal
+    are recorded as standard Income/Expense transactions using the reserved
+    system categories 'Savings Withdraw' (Income) and 'Savings' (Expense),
+    so that SQL triggers keep BankAccounts.Balance automatically in sync.
+
+    IMPORTANT:
+        - `CurrentAmount` is managed exclusively by `saving_service.py`.
+          There are NO SQL triggers on this table.
+        - `Status` transitions are also managed by the service layer:
+            Active    → Completed : when CurrentAmount >= TargetAmount.
+            Completed → Active    : when a withdrawal drops CurrentAmount
+                                    below TargetAmount.
+        - Never mutate `CurrentAmount` or `Status` outside `saving_service.py`.
+
+    Relationships:
+        user → User (many-to-one)
+    """
+
+    __tablename__ = "SavingGoals"
+
+    GoalID: Mapped[int] = mapped_column(
+        "GoalID", primary_key=True, autoincrement=True
+    )
+    UserID: Mapped[int] = mapped_column(
+        "UserID", ForeignKey("Users.UserID", ondelete="CASCADE"), nullable=False
+    )
+    GoalName: Mapped[str] = mapped_column(
+        "GoalName", String(255), nullable=False
+    )
+    TargetAmount: Mapped[Decimal] = mapped_column(
+        "TargetAmount",
+        Numeric(15, 2),
+        nullable=False,
+        comment="Must be > 0. Enforced by CHECK constraint.",
+    )
+    CurrentAmount: Mapped[Decimal] = mapped_column(
+        "CurrentAmount",
+        Numeric(15, 2),
+        nullable=False,
+        default=Decimal("0.00"),
+        comment="Managed by saving_service.py — never updated by triggers.",
+    )
+    Deadline: Mapped[Optional[date]] = mapped_column(
+        "Deadline", Date, nullable=True
+    )
+    Status: Mapped[GoalStatus] = mapped_column(
+        "Status",
+        SAEnum(GoalStatus, values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+        default=GoalStatus.Active,
+        server_default="Active",
+    )
+    CreatedAt: Mapped[datetime] = mapped_column(
+        "CreatedAt", DateTime, nullable=False, server_default=func.now()
+    )
+    UpdatedAt: Mapped[datetime] = mapped_column(
+        "UpdatedAt",
+        DateTime,
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    # --- Relationships ---
+    user: Mapped["User"] = relationship("User", back_populates="saving_goals")
+
+    # --- Constraints + Performance Index (mirrors master_schemas.sql) ---
+    __table_args__ = (
+        CheckConstraint("TargetAmount > 0", name="chk_savinggoal_target_positive"),
+        Index("idx_savinggoals_user", "UserID", "Status"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<SavingGoal id={self.GoalID} "
+            f"name='{self.GoalName}' "
+            f"current={self.CurrentAmount}/{self.TargetAmount} "
+            f"status={self.Status.value}>"
         )
