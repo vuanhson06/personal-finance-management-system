@@ -45,6 +45,7 @@ from sqlalchemy.orm import Session
 from bank_sync_service import process_webhook_payload
 from config import settings
 from database import SessionLocal
+from models import WebhookLog
 
 # =============================================================================
 # Application Setup
@@ -121,9 +122,25 @@ def receive_transaction() -> tuple[Response, int]:
 
     # --- Step 3 & 4: Delegate to service, map response code to HTTP status ---
     db: Session = SessionLocal()
+    
     try:
         result: dict = process_webhook_payload(payload, db)
         http_code: int = result.get("code", 200)
+
+        # Log to DB (Dedicated block to prevent silent logging failures)
+        try:
+            log_entry = WebhookLog(
+                ExternalTransID=payload.get("bank_transaction_id"),
+                Status=result.get("status", "SUCCESS"),
+                StatusCode=http_code,
+                Detail=result.get("message") or result.get("detail")
+            )
+            db.add(log_entry)
+            db.commit()
+            logger.info("✅ WebhookLog persisted for TXN: %s", payload.get("bank_transaction_id"))
+        except Exception as log_err:
+            db.rollback()
+            logger.error("❌ Failed to persist WebhookLog: %s", log_err)
 
         # Build clean response — never include internal 'code' key in body
         response_body = {k: v for k, v in result.items() if k != "code"}
@@ -132,35 +149,36 @@ def receive_transaction() -> tuple[Response, int]:
     except ValueError as e:
         # --- Step 5: Insufficient Funds or invalid business rule ---
         msg: str = str(e)
-        if "Insufficient funds" in msg:
-            logger.warning(
-                "Webhook rejected (insufficient funds) for tx_id='%s': %s",
-                payload.get("bank_transaction_id", "<unknown>"), msg,
-            )
-            return jsonify({
-                "status": "INSUFFICIENT_FUNDS",
-                "detail": msg,
-            }), 422
-        # Any other ValueError from the service layer (e.g. schema mismatch)
-        logger.warning(
-            "Webhook ValueError for tx_id='%s': %s",
-            payload.get("bank_transaction_id", "<unknown>"), msg,
+        status_str = "INSUFFICIENT_FUNDS" if "Insufficient funds" in msg else "INVALID_REQUEST"
+        http_code = 422 if "Insufficient funds" in msg else 400
+        
+        # Log failure
+        log = WebhookLog(
+            ExternalTransID=payload.get("bank_transaction_id"),
+            Status=status_str,
+            StatusCode=http_code,
+            Detail=msg
         )
-        return jsonify({
-            "status": "INVALID_REQUEST",
-            "detail":  msg,
-        }), 400
+        db.add(log)
+        db.commit()
+
+        logger.warning("Webhook rejected (%s): %s", status_str, msg)
+        return jsonify({"status": status_str, "detail": msg}), http_code
 
     except Exception as e:
-        # --- Step 6: Outer safety net — no stack trace in response ---
-        logger.error(
-            "Unhandled exception in webhook handler for tx_id='%s': %s",
-            payload.get("bank_transaction_id", "<unknown>"), e,
+        # --- Step 6: Outer safety net ---
+        db.rollback()
+        log = WebhookLog(
+            ExternalTransID=payload.get("bank_transaction_id"),
+            Status="CRITICAL_ERROR",
+            StatusCode=500,
+            Detail=str(e)
         )
-        return jsonify({
-            "error":  "Internal Server Error",
-            "detail": "An unexpected error occurred. Please retry later.",
-        }), 500
+        db.add(log)
+        db.commit()
+        
+        logger.error("Unhandled exception: %s", e)
+        return jsonify({"error": "Internal Server Error", "detail": str(e)}), 500
 
     finally:
         db.close()

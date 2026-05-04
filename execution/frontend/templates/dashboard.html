@@ -1,0 +1,385 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - StayRichhh!!!{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Dashboard specific layout */
+    .dashboard-layout {
+        display: flex;
+        min-height: 100vh;
+    }
+    
+    .sidebar {
+        width: 250px;
+        padding: 30px 20px;
+        border-right: 2px solid rgba(255,255,255,0.2);
+    }
+    
+    .main-content {
+        flex: 1;
+        padding: 40px;
+        overflow-y: auto;
+    }
+
+    .nav-link {
+        color: var(--neu-text-secondary);
+        font-weight: 500;
+        margin-bottom: 10px;
+        border-radius: 12px;
+        padding: 10px 15px;
+        transition: all 0.2s ease-in-out;
+    }
+    
+    .nav-link:hover {
+        color: var(--neu-primary);
+        background: var(--neu-surface);
+        box-shadow: 4px 4px 8px #c4c3c2, -4px -4px 8px #ffffff;
+    }
+
+    .nav-link.active {
+        color: var(--neu-primary);
+        background: var(--neu-surface);
+        box-shadow: inset 4px 4px 8px #c4c3c2, inset -4px -4px 8px #ffffff;
+    }
+
+    /* Financial Cards styling */
+    .fin-card {
+        padding: 24px;
+        margin-bottom: 24px;
+        min-height: 140px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        border-radius: 20px; /* Explicit for consistency */
+    }
+
+    .fin-card-icon {
+        width: 42px;
+        height: 42px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border-radius: 12px;
+        font-size: 1.2rem;
+        color: var(--neu-primary);
+    }
+    .fin-card-icon i, .fin-card-icon svg {
+        width: 20px;
+        height: 20px;
+        stroke-width: 2px;
+    }
+
+    .fin-value {
+        font-size: 2rem;
+        margin-bottom: 0;
+    }
+    
+    .ticker-card {
+        padding: 24px;
+        min-width: 220px;
+        margin-right: 25px;
+        margin-top: 15px;    /* Space for top shadow */
+        margin-bottom: 25px; /* Space for bottom shadow */
+        margin-left: 15px;   /* Space for left shadow */
+        border-radius: 20px;
+        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        background: var(--neu-surface);
+        position: relative;
+        overflow: visible; /* Ensure shadows aren't clipped */
+    }
+
+    .ticker-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 12px 12px 24px #c4c3c2, -12px -12px 24px #ffffff;
+    }
+
+    /* Container for tickers: add padding to allow shadows to spread */
+    #marketTickerContainer {
+        padding: 10px;
+        margin-left: -10px;
+        margin-right: -10px;
+        scrollbar-width: none; /* Hide scrollbar for cleaner look */
+    }
+    
+    #marketTickerContainer::-webkit-scrollbar {
+        display: none;
+    }
+
+    .ticker-delete-btn {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--neu-surface);
+        box-shadow: 2px 2px 5px #c4c3c2, -2px -2px 5px #ffffff;
+        border-radius: 50%;
+        border: none;
+        color: var(--neu-danger);
+        opacity: 0;
+        transition: all 0.2s ease;
+        font-size: 0.65rem;
+        cursor: pointer;
+        z-index: 10;
+    }
+
+    .ticker-card:hover .ticker-delete-btn {
+        opacity: 0.8;
+    }
+
+    .ticker-delete-btn:hover {
+        opacity: 1;
+        box-shadow: inset 2px 2px 5px #c4c3c2, inset -2px -2px 5px #ffffff;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <h3 class="brand-logo mb-5">
+            <span class="brand-stay">STAY</span><span class="brand-rich">RICH</span>
+        </h3>
+        <hr class="my-4" style="border-color: rgba(255,255,255,0.05);">
+        
+        {% if session['role'] == 'Admin' %}
+        <div class="neu-inset p-3 mb-4 text-center" style="border-radius: 15px; background: rgba(0,0,0,0.02);">
+            <small class="text-muted d-block mb-2">Role: Administrator</small>
+            <button class="neu-btn btn-sm w-100 d-flex align-items-center justify-content-center gap-2" onclick="switchMode()">
+                <div class="icon-box" style="width: 28px; height: 28px; min-width: 28px;"><i data-lucide="shield"></i></div>
+                <span>Switch to Admin Mode</span>
+            </button>
+        </div>
+        {% endif %}
+
+        <nav class="nav flex-column">
+            <a class="nav-link active" href="/dashboard">
+                <div class="icon-box"><i data-lucide="layout-dashboard"></i></div>
+                <span>Dashboard</span>
+            </a>
+            <a class="nav-link" href="/transactions">
+                <div class="icon-box"><i data-lucide="arrow-left-right"></i></div>
+                <span>Transactions</span>
+            </a>
+            <a class="nav-link" href="/budgets">
+                <div class="icon-box"><i data-lucide="wallet"></i></div>
+                <span>Budgets</span>
+            </a>
+            <a class="nav-link" href="/goals">
+                <div class="icon-box"><i data-lucide="target"></i></div>
+                <span>Goals</span>
+            </a>
+            <a class="nav-link" href="/analytics">
+                <div class="icon-box"><i data-lucide="bar-chart-3"></i></div>
+                <span>Analytics</span>
+            </a>
+            <a class="nav-link" href="/sync">
+                <div class="icon-box"><i data-lucide="refresh-cw"></i></div>
+                <span>Sync</span>
+            </a>
+            <hr class="my-4" style="border-color: rgba(255,255,255,0.05);">
+            <a class="nav-link text-danger" href="/api/auth/logout">
+                <div class="icon-box"><i data-lucide="log-out"></i></div>
+                <span>Logout</span>
+            </a>
+        </nav>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Top Bar with Avatar -->
+        <div class="top-bar">
+            <button class="avatar-btn" onclick="openProfileModal()" title="My Profile">👤</button>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-5">
+            <h2 class="mb-0">Overview</h2>
+            <button class="neu-btn-primary" onclick="window.location.href='/transactions'"><i data-lucide="plus" class="me-2" style="width: 18px; height: 18px;"></i>New Transaction</button>
+        </div>
+
+        <div class="row">
+            <!-- Total Balance Card -->
+            <div class="col-md-4">
+                <div class="neu-outset fin-card">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="neu-inset fin-card-icon"><i data-lucide="landmark"></i></div>
+                        <div class="text-muted fw-bold">Total Balance</div>
+                    </div>
+                    <div>
+                        <p class="fin-value display-font" id="totalBalanceVal">Loading...</p>
+                        <small class="text-success fw-bold d-flex align-items-center" id="totalBalanceSub">
+                            <i data-lucide="check-circle" class="me-1" style="width: 12px; height: 12px;"></i> Updated just now
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Monthly Spending Card -->
+            <div class="col-md-4">
+                <div class="neu-outset fin-card">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="neu-inset fin-card-icon" style="color: var(--neu-danger);"><i data-lucide="credit-card"></i></div>
+                        <div class="text-muted fw-bold" id="spendingMonthLabel">Month Spending</div>
+                    </div>
+                    <div>
+                        <p class="fin-value display-font" id="monthlySpendingVal">Loading...</p>
+                        <small class="text-danger fw-bold d-flex align-items-center" id="monthlySpendingSub">
+                            <i data-lucide="trending-down" class="me-1" style="width: 14px; height: 14px;"></i> Outflow
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Monthly Income Card -->
+            <div class="col-md-4">
+                <div class="neu-outset fin-card">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="neu-inset fin-card-icon" style="color: var(--neu-success);"><i data-lucide="banknote"></i></div>
+                        <div class="text-muted fw-bold" id="incomeMonthLabel">Month Income</div>
+                    </div>
+                    <div>
+                        <p class="fin-value display-font" id="monthlyIncomeVal">Loading...</p>
+                        <small class="text-success fw-bold d-flex align-items-center" id="monthlyIncomeSub">
+                            <i data-lucide="trending-up" class="me-1" style="width: 14px; height: 14px;"></i> Inflow
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Market Watch Section -->
+        <div class="d-flex justify-content-between align-items-center mb-5">
+            <h2 class="mb-0">Market Watch</h2>
+            <button class="neu-btn rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; padding: 0;" onclick="openMarketModal()">
+                <i data-lucide="plus" style="width: 20px; height: 20px;"></i>
+            </button>
+        </div>
+        <!-- Horizontal scrolling container for tickers -->
+        <div class="d-flex overflow-auto pb-3" id="marketTickerContainer">
+            <!-- Ticker cards will be injected here via JS -->
+            <div class="neu-outset ticker-card text-center text-muted">
+                Loading live data...
+            </div>
+        </div>
+
+        <!-- Budget Overview Section -->
+        <h3 class="mt-5 mb-3" style="color: var(--neu-primary);">Monthly Budget Overview</h3>
+        <div class="row mb-5">
+            <div class="col-12">
+                <div class="neu-outset p-4" style="border-radius: 20px;">
+                    <div id="dashboardBudgetsContainer">
+                        <div class="text-center text-muted">Loading budgets...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+
+    <!-- Add Market Watch Modal -->
+    <div class="modal fade" id="addMarketModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content neu-outset border-0" style="border-radius: 20px;">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold" style="color: var(--neu-primary);">Add Asset to Watchlist</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="addMarketForm">
+                    <div class="modal-body py-4">
+                        <div class="mb-3">
+                            <label class="form-label text-muted small fw-bold">Yahoo Finance Ticker</label>
+                            <input type="text" name="symbol" class="form-control neu-inset border-0" placeholder="e.g. AAPL, BTC-USD, GC=F" required>
+                        </div>
+                        <div class="mb-0">
+                            <label class="form-label text-muted small fw-bold">Asset Type</label>
+                            <select name="asset_type" class="form-select neu-inset border-0">
+                                <option value="Stock">Stock / Equity</option>
+                                <option value="Crypto">Cryptocurrency</option>
+                                <option value="Commodity">Commodity / Metal</option>
+                                <option value="ETF">ETF / Fund</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0 pt-0">
+                        <button type="button" class="neu-btn-secondary btn-sm px-4" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="neu-btn-primary btn-sm px-4">Add Asset</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <!-- Profile & Security Modal -->
+    <div class="modal fade" id="profileModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content neu-outset border-0" style="border-radius: 20px;">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold" style="color: var(--neu-primary);">My Profile & Security</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body py-4">
+                    <!-- User Info Section -->
+                    <div class="mb-4 pb-4 border-bottom" style="border-color: rgba(255,255,255,0.05) !important;">
+                        <h6 class="text-muted small fw-bold text-uppercase mb-3">Account Information</h6>
+                        <div class="d-flex align-items-center gap-3 mb-2">
+                            <div class="avatar-btn" style="cursor: default; width: 60px; height: 60px; font-size: 1.8rem;">👤</div>
+                            <div>
+                                <h5 class="mb-0 fw-bold" id="profileName">Loading...</h5>
+                                <p class="text-muted small mb-0" id="profileEmail">...</p>
+                            </div>
+                        </div>
+                        <p class="text-muted small mb-0 mt-2">Member since: <span id="profileJoined">—</span></p>
+                    </div>
+
+                    <!-- Change Password Section -->
+                    <form id="changePasswordForm">
+                        <h6 class="text-muted small fw-bold text-uppercase mb-3">Change Password</h6>
+                        <div class="mb-3">
+                            <label class="form-label small">Current Password</label>
+                            <input type="password" id="currPass" class="form-control neu-inset border-0" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small">New Password</label>
+                            <input type="password" id="newPass" class="form-control neu-inset border-0" required>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label small">Confirm New Password</label>
+                            <input type="password" id="confirmPass" class="form-control neu-inset border-0" required>
+                        </div>
+                        <button type="submit" class="neu-btn-primary w-100">Update Password</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/market.js') }}"></script>
+<script>
+    async function switchMode() {
+        try {
+            const res = await fetch('/api/auth/switch-mode', { method: 'POST' });
+            if (res.ok) {
+                window.location.href = '/admin'; // Force redirect to admin panel
+            } else {
+                const data = await res.json();
+                Swal.fire('Error', data.message || 'Mode switch failed', 'error');
+            }
+        } catch (err) {
+            console.error('Mode switch error:', err);
+        }
+    }
+</script>
+{% endblock %}

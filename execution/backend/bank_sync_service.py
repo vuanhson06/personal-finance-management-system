@@ -338,7 +338,7 @@ def process_webhook_payload(payload: dict, db: Session) -> dict:
             amount_positive, resolved_user_id, record.TransactionID,
         )
         return {
-            "status":         "PROCESSED",
+            "status":         "SUCCESS",
             "code":           200,
             "transaction_id": record.TransactionID,
         }

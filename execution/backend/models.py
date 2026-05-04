@@ -29,11 +29,14 @@ from sqlalchemy import (
     Enum as SAEnum,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     Text,
     UniqueConstraint,
     func,
+    Boolean,
+    text
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -124,6 +127,9 @@ class User(Base):
         default=UserRole.User,
         server_default="User",
     )
+    IsActive: Mapped[bool] = mapped_column(
+        "IsActive", Boolean, nullable=False, default=True, server_default=text("1")
+    )
     CreatedAt: Mapped[datetime] = mapped_column(
         "CreatedAt", DateTime, nullable=False, server_default=func.now()
     )
@@ -147,6 +153,9 @@ class User(Base):
     )
     market_watches: Mapped[list["MarketWatch"]] = relationship(
         "MarketWatch", back_populates="user", cascade="all, delete-orphan"
+    )
+    admin_logs: Mapped[list["AdminLog"]] = relationship(
+        "AdminLog", foreign_keys="[AdminLog.AdminID]", back_populates="admin", cascade="all, delete-orphan"
     )
     incomes: Mapped[list["Income"]] = relationship(
         "Income", back_populates="user", cascade="all, delete-orphan"
@@ -204,6 +213,38 @@ class User(Base):
 
     def __repr__(self) -> str:
         return f"<User id={self.UserID} email='{self.Email}' role={self.Role.value}>"
+
+# Model: AdminLog
+class AdminLog(Base):
+    """
+    ORM model for the `AdminLogs` table.
+    Captures all administrative actions for auditing purposes.
+    """
+    __tablename__ = "AdminLogs"
+
+    LogID: Mapped[int] = mapped_column("LogID", primary_key=True, autoincrement=True)
+    AdminID: Mapped[int] = mapped_column("AdminID", ForeignKey("Users.UserID", ondelete="CASCADE"), nullable=False)
+    Action: Mapped[str] = mapped_column("Action", String(255), nullable=False)
+    TargetUserID: Mapped[Optional[int]] = mapped_column("TargetUserID", ForeignKey("Users.UserID", ondelete="SET NULL"), nullable=True)
+    Timestamp: Mapped[datetime] = mapped_column("Timestamp", DateTime, nullable=False, server_default=func.now())
+
+    admin: Mapped["User"] = relationship("User", foreign_keys=[AdminID], back_populates="admin_logs")
+    target_user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[TargetUserID])
+
+# Model: WebhookLog
+class WebhookLog(Base):
+    """
+    ORM model for the `WebhookLogs` table.
+    Tracks incoming webhook traffic for system health monitoring.
+    """
+    __tablename__ = "WebhookLogs"
+
+    LogID: Mapped[int] = mapped_column("LogID", primary_key=True, autoincrement=True)
+    ExternalTransID: Mapped[Optional[str]] = mapped_column("ExternalTransID", String(255), nullable=True)
+    Status: Mapped[str] = mapped_column("Status", String(50), nullable=False)
+    StatusCode: Mapped[int] = mapped_column("StatusCode", Integer, nullable=False)
+    Detail: Mapped[Optional[str]] = mapped_column("Detail", Text, nullable=True)
+    Timestamp: Mapped[datetime] = mapped_column("Timestamp", DateTime, nullable=False, server_default=func.now())
 
 
 # =============================================================================

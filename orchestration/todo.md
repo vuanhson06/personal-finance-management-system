@@ -615,7 +615,182 @@ This picks whichever category the database returns first (ORDER BY PK), which is
     ```
   - This keeps the Webhook endpoint's error surface clean and returns a meaningful `422` instead of a generic `500`.
 
+---
 
+## Part 2 - Step 7: API Routing Layer (The Bridge)
 
+**Goal**: Implement a REST API using Flask and Blueprints to expose backend logic to the new Web Frontend. Secure routes using Flask-Session (`@login_required`). Standalone webhook server remains unaffected.
 
+**Status: ✅ COMPLETE**
 
+- [x] **Step API.1 — Main App & Setup**: Create `execution/backend/app.py` with Flask, Flask-Session config, and global error handlers (mapping `ValueError` with "Insufficient funds" to `422`).
+- [x] **Step API.2 — Auth Blueprint**: Create `routes/auth.py` for `/api/auth/login`, `/api/auth/signup`, `/api/auth/logout`, `/api/auth/me`.
+- [x] **Step API.3 — Finance Blueprint**: Create `routes/finance.py` for `/api/accounts`, `/api/transactions/income`, and `/api/transactions/expense`.
+- [x] **Step API.4 — Goals Blueprint**: Create `routes/goals.py` for `/api/goals`, `/api/goals/contribute`, and `/api/goals/withdraw`.
+- [x] **Step API.5 — Reports Blueprint**: Create `routes/reports.py` for `/api/reports/category-spending`, `/api/reports/monthly-trend`, `/api/budgets/status`, and `/api/market/ticker`.
+
+---
+
+## Part 3: Frontend Web App (The Interface)
+
+### Step 1: Authentication & Session Management
+
+**Goal**: Establish the base frontend layout and implement the Authentication Portal (Login/Sign-up) using the defined Neumorphism design system and Fetch API to communicate with the existing Flask backend.
+
+**Proposed Steps for Execution:**
+- [x] **Step F.1.1 — Frontend Structure**: Create the `/execution/frontend/templates/` and `/execution/frontend/static/` directories.
+- [x] **Step F.1.2 — Base Layout (`base.html`)**: Create `templates/base.html` containing the Bootstrap 5, SweetAlert2, and Chart.js CDNs, plus our custom stylesheet link.
+- [x] **Step F.1.3 — Neumorphic Styles (`style.css`)**: Implement the CSS tokens (`.neu-outset`, `.neu-inset`, `.neu-btn`, etc.) from `directives/ui_paper_system.md` into `static/css/style.css`.
+- [x] **Step F.1.4 — Auth UI (`login.html` & `signup.html`)**: Build the Login and Sign-up screens using Bootstrap forms mapped to our `.neu-inset` inputs and `.neu-btn` buttons.
+- [x] **Step F.1.5 — Auth Logic (`auth.js`)**: Write the async Fetch API logic in `static/js/auth.js` to handle form submissions to `/api/auth/login` and `/api/auth/signup`. Bind SweetAlert2 for notifications.
+- [x] **Step F.1.6 — Flask Template Routing (`app.py`)**: Update `execution/backend/app.py` to point to the frontend folders (`template_folder='../frontend/templates'`, `static_folder='../frontend/static'`) and add the routes to render the login and signup HTML pages.
+
+### Step 2: Primary Financial Dashboard & Market Watch
+
+**Goal**: Build the main user dashboard (`dashboard.html`) utilizing the Neumorphism design system. It will display the user's Total Balance and Monthly Spending overview, alongside a real-time Market Watch ticker fetching live prices via the API.
+
+**Proposed Steps for Execution:**
+- [x] **Step F.2.1 — Dashboard Layout (`dashboard.html`)**: Create the `dashboard.html` template extending `base.html`. Construct a grid layout using Bootstrap 5, wrapping content in `.neu-outset` cards for the "Total Balance" and "Monthly Spending" summaries.
+- [x] **Step F.2.2 — Dashboard Logic (`dashboard.js`)**: Create `static/js/dashboard.js`. Implement async functions to fetch data from `/api/accounts` (for total balance) and `/api/reports/monthly-trend` (for spending), updating the DOM dynamically.
+- [x] **Step F.2.3 — Market Ticker UI**: Design a grid-based or scrolling ticker section within the dashboard using neumorphic cards for individual assets (e.g., Gold, Stocks, Crypto).
+- [x] **Step F.2.4 — Market Ticker Logic (`market.js`)**: Create `static/js/market.js` to fetch live prices from `/api/market/ticker`. Update the UI with price values and positive/negative percentage changes (styled with our Success/Danger tokens).
+- [x] **Step F.2.5 — Flask Route Update (`app.py`)**: Update the existing `/dashboard` route in `app.py` to render `dashboard.html` instead of the current placeholder text.
+
+### Step 3: Account & Transaction Manager
+
+**Goal**: Build the UI interfaces (`transactions.html`) for managing bank accounts and recording transactions. The transaction entry must integrate with the Strict Balance Guard, displaying localized error modals if the backend detects an overdraw.
+
+**Proposed Steps for Execution:**
+- [x] **Step F.3.1 — Transactions Layout (`transactions.html`)**: Create `transactions.html` integrating the sidebar and a two-column grid. The left column lists Accounts and Transactions history, while the right column holds the forms.
+- [x] **Step F.3.2 — Account List & Backend Link**: Build the HTML structure for displaying existing bank accounts (including the `AccountNumber`). Ensure the `/api/accounts` endpoint supports creating accounts if not already implemented.
+- [x] **Step F.3.3 — Transaction Form UI**: Build the HTML forms for adding Income and Expenses. Include dropdowns for selecting Accounts and Categories.
+- [x] **Step F.3.4 — Transactions Logic (`transactions.js`)**: Create `static/js/transactions.js` to handle form submissions via Fetch API to `/api/transactions/income` and `/api/transactions/expense`.
+- [x] **Step F.3.5 — Strict Balance Guard UI Binding**: In `transactions.js`, explicitly check for HTTP 422 responses. When received, trigger a bold SweetAlert2 error modal using our `.neu-outset` popup styling to warn the user of "Insufficient Funds".
+- [x] **Step F.3.6 — Flask Route Update (`app.py`)**: Update `app.py` to add a UI route for `/transactions` rendering `transactions.html`.
+
+### Step 4: Saving Goals Module
+
+**Goal**: Build the UI interface (`goals.html`) for managing Saving Goals. This includes rendering existing goals with dynamic progress bars and providing actions to "Contribute" and "Withdraw" funds, hooked up to the strict balance-protected backend endpoints.
+
+**Proposed Steps for Execution:**
+- [x] **Step F.4.1 — Goals Layout (`goals.html`)**: Create `goals.html` extending `base.html` with the standard sidebar. Establish a layout to display a list of active and completed goals.
+- [x] **Step F.4.2 — Goal Cards UI**: Design individual `.neu-outset` cards for each goal. Each card will show the Goal Name, Target Amount, Current Amount, and a Bootstrap progress bar indicating the completion percentage.
+- [x] **Step F.4.3 — Goal Actions UI**: Add "Contribute" and "Withdraw" buttons on each goal card. These will open SweetAlert2 modals prompting the user to select an account and enter an amount.
+- [x] **Step F.4.4 — Create Goal Form**: Add a section or modal allowing the user to define a new Saving Goal (Name, Target Amount, Deadline).
+- [x] **Step F.4.5 — Goals Logic (`goals.js`)**: Create `static/js/goals.js`. Implement async functions to `GET /api/goals` and render the cards. Handle form submissions to create, contribute, and withdraw via Fetch API. Crucially, integrate the HTTP 422 Strict Balance Guard during the contribute action.
+- [x] **Step F.4.6 — Flask Route Update (`app.py`)**: Update `app.py` to add a UI route for `/goals` rendering `goals.html`.
+
+### Step 5: Webhook Sync Monitor
+
+**Goal**: Build a Sync Dashboard (`sync.html`) to monitor automated transactions pulled via the Webhook Simulator. Provide a user interface to trigger a simulation payload and view idempotency/categorization feedback.
+
+**Proposed Steps for Execution:**
+- [x] **Step F.5.1 — Sync Layout (`sync.html`)**: Create `sync.html` extending `base.html` with the standard sidebar. Add a primary data table wrapper using the `.neu-outset` styling to hold the synced transactions.
+- [x] **Step F.5.2 — Sync Table UI**: Design a responsive table structure displaying the Date, Description, Amount, and Account. Provide visual indicators (like badges) for items categorized as "Others" or marked as "Duplicate/Ignored" based on idempotency rules.
+- [x] **Step F.5.3 — Sync Simulator UI**: Add a manual trigger section (a neumorphic card) with a button to hit a new `/api/sync/simulate` endpoint, allowing the user to forcefully inject a mock bank payload into the webhook server.
+- [x] **Step F.5.4 — Backend Simulator Route**: Implement a new backend route `POST /api/sync/simulate` in `routes/finance.py` that constructs a mock JSON payload and POSTs it to the local webhook server (`http://localhost:5050/webhook/transaction`) using the configured `X-API-KEY`.
+- [x] **Step F.5.5 — Sync Logic (`sync.js`)**: Create `static/js/sync.js`. Fetch recent transactions to populate the table. Bind the manual trigger button to the simulator endpoint using a SweetAlert2 loading state and handle the responses.
+- [x] **Step F.5.6 — Flask Route Update (`app.py`)**: Register the `/sync` UI route in `app.py` to render `sync.html`.
+
+### Step 6: Visual Analytics & Reporting
+
+**Goal**: Build an Analytics Dashboard (`analytics.html`) utilizing `Chart.js` for visual data representation and providing searchable tabular summaries of historical transactions.
+
+**Proposed Steps for Execution:**
+- [x] **Step F.6.1 — Analytics Layout (`analytics.html`)**: Create `analytics.html` extending `base.html` with the standard sidebar. Scaffold a grid layout for displaying charts at the top and a full data table at the bottom.
+- [x] **Step F.6.2 — Chart.js Integration UI**: Design `.neu-outset` container cards holding `<canvas>` elements for a "Monthly Trend" line/bar chart and a "Category Spending" doughnut chart.
+- [x] **Step F.6.3 — Searchable Data Table UI**: Build a large tabular section with an input field for client-side search/filtering of historical transactions.
+- [x] **Step F.6.4 — Analytics Logic (`analytics.js`)**: Create `static/js/analytics.js`. Fetch data from `/api/reports/monthly-trend` and `/api/reports/category-spending` to dynamically initialize the Chart.js instances. Fetch historical transactions to populate the data table and bind a simple text-filtering algorithm to the search input.
+- [x] **Step F.6.5 — Flask Route Update (`app.py`)**: Register the `/analytics` UI route in `app.py` to render `analytics.html`.
+
+### Step 7: Web Budget Planner & Visual Alerts
+
+**Goal**: Build a Budget Manager (`budgets.html`) that allows users to create/edit monthly category limits and provides visual alerts when spending approaches or exceeds those limits.
+
+**Proposed Steps for Execution:**
+- [x] **Step F.7.1 — Budgets Layout (`budgets.html`)**: Create `budgets.html` extending `base.html` with the standard sidebar. Design a layout containing a "Create Budget" form section and a list/grid of active budget trackers.
+- [x] **Step F.7.2 — Budget Tracker UI**: Design individual `.neu-outset` budget cards. Each card will display the Category, Period (e.g., YYYY-MM), the Target Limit, the Current Spending, and a Bootstrap progress bar.
+- [x] **Step F.7.3 — Visual Alerts Logic**: The UI progress bars must dynamically color-code based on the percentage consumed (e.g., Green `< 80%`, Warning Orange `> 80%`, Danger Red `>= 100%`).
+- [x] **Step F.7.4 — Budgets Logic (`budgets.js`)**: Create `static/js/budgets.js`. Implement async functions to fetch `/api/budgets` to render the tracker cards. Fetch from `/api/categories` to populate the form, and handle submissions to `POST /api/budgets` via Fetch API.
+- [x] **Step F.7.5 — Flask Route Update (`app.py`)**: Register the `/budgets` UI route in `app.py` to render `budgets.html`.
+
+---
+
+## Phase 4: Final QA & Bug Fixing
+
+**Goal**: Systematically verify all features, edge cases, data isolation guarantees, and UI/UX consistency across the entire system before final release.
+
+### Step QA.1 — User Profile & Auth Module
+- [ ] **QA-AUTH-01**: Successful registration with all valid fields; verify session is created and redirect to `/dashboard`.
+- [ ] **QA-AUTH-02**: Registration with a duplicate email; verify HTTP 400 and SweetAlert2 error message.
+- [ ] **QA-AUTH-03**: Registration with missing fields (no username, email, or password); verify HTTP 400.
+- [ ] **QA-AUTH-04**: Successful login with valid credentials; verify session and dashboard redirect.
+- [ ] **QA-AUTH-05**: Login with incorrect password; verify HTTP 400 and SweetAlert2 error.
+- [ ] **QA-AUTH-06**: Accessing a protected route (e.g., `/dashboard`) while unauthenticated; verify redirect to `/login`.
+- [ ] **QA-AUTH-07**: Session persistence across page refreshes; verify user remains logged in.
+- [ ] **QA-AUTH-08**: Logout clears session; verify `/api/auth/logout` redirects to `/login` and session is destroyed.
+
+### Step QA.2 — Transaction Engine
+- [ ] **QA-TXN-01**: Add a valid income transaction; verify balance increases, row appears in history table.
+- [ ] **QA-TXN-02**: Add a valid expense transaction; verify balance decreases correctly.
+- [ ] **QA-TXN-03**: **Strict Balance Guard** — Attempt to add an expense greater than account balance; verify HTTP 422 response and SweetAlert2 "Insufficient Funds" modal fires.
+- [ ] **QA-TXN-04**: **Balance Guard at DB Layer** — Confirm the `BEFORE INSERT` trigger also rejects the transaction at the SQL level if the Python guard were bypassed.
+- [ ] **QA-TXN-05**: Auto-categorization via Webhook assigns "Others" category when no matching category is found; verify the orange badge appears in `/sync`.
+- [ ] **QA-TXN-06**: Add a transaction with a non-existent `account_id`; verify HTTP 400 and no DB corruption.
+- [ ] **QA-TXN-07**: Attempt to add a transaction with a `category_id` belonging to another user; verify HTTP 400 or data isolation rejection.
+
+### Step QA.3 — Bank Account & Balance Tracking
+- [ ] **QA-BAL-01**: Create a new bank account; verify it appears in the accounts list with a zero balance.
+- [ ] **QA-BAL-02**: After adding income, verify `BankAccounts.Balance` in the DB matches the UI-displayed balance.
+- [ ] **QA-BAL-03**: After adding an expense, verify `BankAccounts.Balance` decreases by the exact expense amount via the SQL trigger.
+- [ ] **QA-BAL-04**: Historical balance accuracy — run a series of transactions and verify the running balance shown matches manual calculation.
+
+### Step QA.4 — Analytics & Reporting
+- [ ] **QA-RPT-01**: Monthly Trend Chart renders with correct bar heights for Income vs. Expense for the current month.
+- [ ] **QA-RPT-02**: Category Doughnut Chart correctly slices spending by category; hovering shows correct USD tooltip.
+- [ ] **QA-RPT-03**: Historical table lists all transactions; default sort is newest-first.
+- [ ] **QA-RPT-04**: Search filter — typing in the search bar instantly filters rows by description, date, and category.
+- [ ] **QA-RPT-05**: `/api/reports/monthly-trend` and `/api/reports/category-spending` return correctly aggregated data when called directly.
+
+### Step QA.5 — Budget Planner & Visual Alerts
+- [ ] **QA-BDG-01**: Create a new budget for a category/period; verify it appears as a tracker card.
+- [ ] **QA-BDG-02**: **Healthy State** — spending below 80% shows a Teal/Green progress bar.
+- [ ] **QA-BDG-03**: **Warning State** — spending at 82% shows an Orange progress bar and the "⚠️ Approaching Limit" badge.
+- [ ] **QA-BDG-04**: **Danger State** — spending at or above 100% shows a Red progress bar at full width and the "⚠️ Budget Exceeded" badge.
+- [ ] **QA-BDG-05**: Duplicate budget for same category/period; verify the backend returns an appropriate error.
+
+### Step QA.6 — Market Watch Dashboard
+- [ ] **QA-MKT-01**: Market Ticker on `/dashboard` loads and displays at least one asset (Gold, Stock, or Crypto).
+- [ ] **QA-MKT-02**: Market data auto-refreshes every 60 seconds without a page reload.
+- [ ] **QA-MKT-03**: If the external API is unreachable, verify the UI shows a graceful "Unavailable" state rather than crashing.
+
+### Step QA.7 — Webhook Sync Security & Idempotency
+- [ ] **QA-WBH-01**: Send a valid webhook payload to `POST /webhook/transaction`; verify transaction is created.
+- [ ] **QA-WBH-02**: **Idempotency** — Send the same `bank_transaction_id` twice; verify the second request returns a non-500 response and no duplicate transaction is created.
+- [ ] **QA-WBH-03**: **API Key Security** — Send a webhook request with an invalid/missing `X-API-KEY`; verify HTTP 401 response.
+- [ ] **QA-WBH-04**: **Simulator UI** — Click "Trigger Webhook" on `/sync`; verify the table updates and SweetAlert2 confirmation fires.
+- [ ] **QA-WBH-05**: **Idempotency via UI** — Click "Trigger Webhook" with the same Transaction ID twice; verify the SweetAlert2 "Idempotency Guard" info modal fires.
+- [ ] **QA-WBH-06**: Webhook with an expense exceeding account balance; verify HTTP 422 is returned by the webhook server.
+
+### Step QA.8 — Saving Goals
+- [ ] **QA-GOL-01**: Create a new goal; verify it appears as a card with 0% progress.
+- [ ] **QA-GOL-02**: Contribute to a goal; verify progress bar increases and account balance decreases.
+- [ ] **QA-GOL-03**: **Balance Guard for Goals** — Attempt to contribute more than account balance; verify HTTP 422 and SweetAlert2 "Insufficient Funds" modal.
+- [ ] **QA-GOL-04**: Withdraw from a goal; verify progress bar decreases and account balance increases.
+- [ ] **QA-GOL-05**: Withdraw more than the goal's `CurrentAmount`; verify HTTP 400 error.
+- [ ] **QA-GOL-06**: Contribute the exact remaining amount to reach 100%; verify goal status auto-changes to "Completed" and progress bar turns Green.
+
+### Step QA.9 — Data Isolation
+- [ ] **QA-ISO-01**: Log in as User A, get the ID of one of User A's accounts. Log in as User B and attempt `GET /api/accounts/<user_a_account_id>`; verify HTTP 403 or 404 (not 200).
+- [ ] **QA-ISO-02**: Attempt `POST /api/transactions/expense` as User B using User A's `account_id`; verify the transaction is rejected.
+- [ ] **QA-ISO-03**: Verify `/api/goals` for User B contains zero goals from User A.
+- [ ] **QA-ISO-04**: URL manipulation — navigate to `/api/budgets/<user_a_budget_id>` while authenticated as User B; verify 404 or access denied.
+
+### Step QA.10 — UI/UX & Neumorphism Consistency
+- [ ] **QA-UI-01**: All pages use the correct surface color `#E7E5E4`.
+- [ ] **QA-UI-02**: `.neu-outset` cards display the correct light-source box-shadow (top-left light, bottom-right dark).
+- [ ] **QA-UI-03**: `.neu-inset` inputs display the inverted shadow (pressed-in effect).
+- [ ] **QA-UI-04**: All buttons show the correct hover state (shadow reduction / inset transition).
+- [ ] **QA-UI-05**: SweetAlert2 modals inherit the Neumorphic surface `#E7E5E4` background and `.neu-outset` CSS class.
+- [ ] **QA-UI-06**: All pages are responsive — sidebar collapses gracefully on smaller viewport widths.
+- [ ] **QA-UI-07**: No `favicon.ico` 404 errors appear in the server log.

@@ -137,6 +137,20 @@ def create_budget(
     _validate_period(period)
     _assert_expense_category_ownership(category_id, user_id, db)
 
+    # Check if budget already exists for this category and period
+    existing = db.execute(
+        select(Budget).where(
+            Budget.UserID == user_id,
+            Budget.CategoryID == category_id,
+            Budget.Period == period.strip(),
+        )
+    ).scalars().first()
+    
+    if existing:
+        raise ValueError(
+            f"A budget for this category already exists for the period {period}."
+        )
+
     try:
         budget = Budget(
             UserID=user_id,
@@ -265,3 +279,93 @@ def get_budget_status(
         "remaining":   remaining,
         "status":      status,
     }
+
+
+def get_all_budget_statuses(user_id: int, period: str, db: Session) -> list[dict]:
+    """
+    Returns the real-time budget consumption status for all budgets in a given period.
+    Uses a single query to prevent N+1 query issues.
+    """
+    _validate_period(period)
+    
+    query = text("""
+        SELECT 
+            b.BudgetID, 
+            b.CategoryID, 
+            c.CategoryName, 
+            b.LimitAmount, 
+            GetBudgetStatus(:uid, b.CategoryID, :period) AS remaining
+        FROM Budgets b
+        JOIN Categories c ON b.CategoryID = c.CategoryID
+        WHERE b.UserID = :uid AND b.Period = :period
+    """)
+    
+    results = db.execute(query, {"uid": user_id, "period": period.strip()}).mappings().all()
+    
+    statuses = []
+    for row in results:
+        limit = Decimal(str(row["LimitAmount"]))
+        remaining = Decimal(str(row["remaining"]))
+        actual_spending = limit - remaining
+        
+        # Calculate percentage (prevent division by zero)
+        if limit > 0:
+            percentage = (actual_spending / limit) * 100
+        else:
+            percentage = Decimal("0")
+            
+        status = "OK"
+        if remaining < Decimal("0"):
+            status = "OVER_BUDGET"
+        elif percentage >= Decimal("80"):
+            status = "WARNING"
+            
+        statuses.append({
+            "budget_id": row["BudgetID"],
+            "category_id": row["CategoryID"],
+            "category_name": row["CategoryName"],
+            "limit": limit,
+            "remaining": remaining,
+            "actual_spending": actual_spending,
+            "progress_percentage": min(percentage, Decimal("100")), # Cap at 100 for UI purposes
+            "status": status
+        })
+        
+    return statuses
+
+
+
+def update_budget(
+    budget_id: int,
+    user_id: int,
+    limit_amount: Decimal,
+    db: Session,
+) -> Budget:
+    """Updates an existing budget limit."""
+    if limit_amount <= Decimal("0"):
+        raise ValueError("Budget limit must be greater than 0.")
+        
+    budget: Optional[Budget] = db.execute(
+        select(Budget).where(Budget.BudgetID == budget_id, Budget.UserID == user_id)
+    ).scalar_one_or_none()
+    
+    if budget is None:
+        raise ValueError(f"BudgetID={budget_id} not found or not owned by user.")
+        
+    budget.LimitAmount = limit_amount
+    db.commit()
+    db.refresh(budget)
+    return budget
+
+
+def delete_budget(budget_id: int, user_id: int, db: Session) -> None:
+    """Deletes an existing budget."""
+    budget: Optional[Budget] = db.execute(
+        select(Budget).where(Budget.BudgetID == budget_id, Budget.UserID == user_id)
+    ).scalar_one_or_none()
+    
+    if budget is None:
+        raise ValueError(f"BudgetID={budget_id} not found or not owned by user.")
+        
+    db.delete(budget)
+    db.commit()

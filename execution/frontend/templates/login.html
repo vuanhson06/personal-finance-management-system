@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Login - StayRichhh!!!{% endblock %}
+
+{% block content %}
+<div class="auth-wrapper">
+    <div class="neu-outset auth-card text-center">
+        <div class="mb-4">
+            <h2 class="mb-1 text-primary-custom" style="color: var(--neu-primary);">STAYRICHHH!!!</h2>
+            <p class="text-muted" style="color: var(--neu-text-secondary) !important;">Sign in to continue</p>
+        </div>
+
+        <form id="loginForm" class="text-start">
+            <div class="mb-4">
+                <label for="email" class="form-label ms-3 text-muted">Email Address</label>
+                <input type="email" class="form-control neu-inset w-100" id="email" name="email" placeholder="name@example.com" required>
+            </div>
+            
+            <div class="mb-4">
+                <label for="password" class="form-label ms-3 text-muted">Password</label>
+                <input type="password" class="form-control neu-inset w-100" id="password" name="password" placeholder="••••••••" required>
+            </div>
+
+            <button type="submit" class="neu-btn-primary w-100 mb-4" id="loginBtn">
+                SIGN IN
+            </button>
+        </form>
+
+        <p class="mb-0">
+            Don't have an account? <a href="/signup" class="auth-link">Create one</a>
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+{% endblock %}

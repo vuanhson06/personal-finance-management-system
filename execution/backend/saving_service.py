@@ -208,7 +208,7 @@ def create_goal(
         raise RuntimeError("Failed to create saving goal. See logs for details.") from e
 
 
-def get_goals(
+def get_user_goals(
     user_id: int,
     db: Session,
     status_filter: Optional[GoalStatus] = None,

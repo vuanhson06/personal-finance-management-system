@@ -253,3 +253,30 @@ def get_user_by_id(user_id: int, db: Session) -> User:
     if user is None:
         raise ValueError(f"No user found with UserID={user_id}.")
     return user
+
+
+def update_user_password(user_id: int, current_password: str, new_password: str, db: Session) -> None:
+    """
+    Updates the password for an existing user after verifying their current password.
+
+    Args:
+        user_id:           The ID of the user to update.
+        current_password:  The existing plain-text password for verification.
+        new_password:      The new plain-text password to set.
+        db:                An active SQLAlchemy Session.
+
+    Raises:
+        ValueError: If current password verification fails or new password is too weak.
+    """
+    user = get_user_by_id(user_id, db)
+
+    if not user.verify_password(current_password):
+        logger.warning("Password update failed: Incorrect current password for user_id=%d.", user_id)
+        raise ValueError("Current password is incorrect.")
+
+    if not new_password or len(new_password) < 8:
+        raise ValueError("New password must be at least 8 characters long.")
+
+    user.set_password(new_password)
+    db.commit()
+    logger.info("Password updated successfully for user_id=%d.", user_id)

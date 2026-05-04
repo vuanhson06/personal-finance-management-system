@@ -28,12 +28,11 @@ Directive Reference:
 
 import random
 import sys
-from datetime import date, timedelta
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Optional
-
 from faker import Faker
-from sqlalchemy import select
+from sqlalchemy import select, text
+from datetime import date, timedelta, datetime
+from decimal import Decimal, ROUND_HALF_UP
+from typing import Optional, List
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
@@ -49,6 +48,8 @@ from models import (
     TransactionType,
     User,
     UserRole,
+    AdminLog,
+    WebhookLog,
 )
 
 # =============================================================================
@@ -131,25 +132,23 @@ EXPENSE_DESCRIPTIONS: dict[str, list[str]] = {
 # =============================================================================
 
 def _random_date_in_month(year: int, month: int) -> date:
-    """
-    Returns a random valid date within the given year and month.
+    """Returns a random date object within the specified year and month."""
+    import calendar
+    _, last_day = calendar.monthrange(year, month)
+    day = random.randint(1, last_day)
+    return date(year, month, day)
 
-    Args:
-        year:  The target year (e.g., 2025).
-        month: The target month (1–12).
 
-    Returns:
-        A random date object falling within that calendar month.
-    """
-    # First day of target month
-    first_day = date(year, month, 1)
-    # First day of the following month, then subtract one day to get last day
-    if month == 12:
-        last_day = date(year + 1, 1, 1) - timedelta(days=1)
-    else:
-        last_day = date(year, month + 1, 1) - timedelta(days=1)
-    delta_days: int = (last_day - first_day).days
-    return first_day + timedelta(days=random.randint(0, delta_days))
+def _random_timestamp_for_date(d: date) -> datetime:
+    """Converts a date to a datetime with random hour, minute, and second."""
+    return datetime.combine(
+        d,
+        datetime.min.time().replace(
+            hour=random.randint(0, 23),
+            minute=random.randint(0, 59),
+            second=random.randint(0, 59)
+        )
+    )
 
 
 def _get_last_12_months() -> list[tuple[int, int]]:
@@ -209,17 +208,21 @@ def clear_data(db: Session) -> None:
     Args:
         db: An active SQLAlchemy Session.
     """
-    print("  🗑️  Clearing existing seeded data...")
-    db.query(MonthlyClosure).delete()
-    db.query(Income).delete()
-    db.query(Expense).delete()
-    db.query(Budget).delete()
-    db.query(MarketWatch).delete()
-    db.query(BankAccount).delete()
-    db.query(Category).delete()
-    db.query(User).delete()
+    print("  Clearing existing seeded data...")
+    db.execute(text("SET FOREIGN_KEY_CHECKS = 0;"))
+    
+    tables = [
+        "AdminLogs", "WebhookLogs", "MonthlyClosures", "Income", 
+        "Expenses", "Budgets", "MarketWatch", "BankAccounts", 
+        "Categories", "Users"
+    ]
+    
+    for table in tables:
+        db.execute(text(f"TRUNCATE TABLE {table};"))
+        
+    db.execute(text("SET FOREIGN_KEY_CHECKS = 1;"))
     db.commit()
-    print("  ✅ Cleared successfully.")
+    print("  Cleared successfully.")
 
 
 # =============================================================================
@@ -241,7 +244,7 @@ def seed_users(db: Session) -> list[User]:
     Returns:
         List of committed User ORM objects with valid UserIDs.
     """
-    print("  👤 Seeding users...")
+    print("  Seeding users...")
 
     users_data: list[dict] = [
         {
@@ -278,6 +281,7 @@ def seed_users(db: Session) -> list[User]:
             "Phone":    "+1-555-040-4004",
             "Password": "DavidPass@2026",
             "Role":     UserRole.User,
+            "IsActive": False, # David is locked for testing
         },
     ]
 
@@ -288,6 +292,7 @@ def seed_users(db: Session) -> list[User]:
             Email=data["Email"],
             PhoneNumber=data["Phone"],
             Role=data["Role"],
+            IsActive=data.get("IsActive", True),
         )
         user.set_password(data["Password"])  # bcrypt hash — never plain text
         db.add(user)
@@ -297,7 +302,7 @@ def seed_users(db: Session) -> list[User]:
         db.refresh(user)
         users.append(user)
 
-    print(f"  ✅ {len(users)} users seeded (1 Admin + {len(users)-1} Users).")
+    print(f"  {len(users)} users seeded (1 Admin + {len(users)-1} Users).")
     return users
 
 
@@ -323,7 +328,7 @@ def seed_bank_accounts(db: Session, users: list[User]) -> list[BankAccount]:
     Returns:
         List of committed BankAccount ORM objects.
     """
-    print("  🏦 Seeding bank accounts...")
+    print("  Seeding bank accounts...")
     accounts: list[BankAccount] = []
     for user_idx, user in enumerate(users, start=1):
         for acc_idx, (account_name, low, high) in enumerate(ACCOUNT_TYPES, start=1):
@@ -341,7 +346,7 @@ def seed_bank_accounts(db: Session, users: list[User]) -> list[BankAccount]:
     db.commit()
     for account in accounts:
         db.refresh(account)
-    print(f"  ✅ {len(accounts)} bank accounts seeded.")
+    print(f"  {len(accounts)} bank accounts seeded.")
     return accounts
 
 
@@ -359,7 +364,7 @@ def seed_market_watches(db: Session, users: list[User]) -> None:
         db:    An active SQLAlchemy Session.
         users: List of committed User objects.
     """
-    print("  📈 Seeding market watchlists...")
+    print("  Seeding market watchlists...")
     count: int = 0
     for user in users:
         chosen_assets: list[dict] = random.sample(ASSET_POOL, k=3)
@@ -371,7 +376,7 @@ def seed_market_watches(db: Session, users: list[User]) -> None:
             ))
             count += 1
     db.commit()
-    print(f"  ✅ {count} market watch entries seeded.")
+    print(f"  {count} market watch entries seeded.")
 
 
 # =============================================================================
@@ -390,7 +395,7 @@ def seed_budgets(db: Session, users: list[User]) -> None:
         db:    An active SQLAlchemy Session.
         users: List of committed User objects.
     """
-    print("  💰 Seeding budgets...")
+    print("  Seeding budgets...")
     current_period: str = date.today().strftime("%Y-%m")
     count: int = 0
 
@@ -418,7 +423,7 @@ def seed_budgets(db: Session, users: list[User]) -> None:
             count += 1
 
     db.commit()
-    print(f"  ✅ {count} budgets seeded for period '{current_period}'.")
+    print(f"  {count} budgets seeded for period '{current_period}'.")
 
 
 # =============================================================================
@@ -449,7 +454,7 @@ def seed_income(
     Returns:
         Total number of Income records inserted.
     """
-    print("  💵 Seeding income transactions (12 months)...")
+    print("  Seeding income transactions (12 months)...")
     months: list[tuple[int, int]] = _get_last_12_months()
     total: int = 0
 
@@ -480,18 +485,20 @@ def seed_income(
                 descriptions: list[str] = INCOME_DESCRIPTIONS.get(
                     cat.CategoryName, ["Income deposit"]
                 )
+                txn_date = _random_date_in_month(year, month)
                 db.add(Income(
                     UserID=user.UserID,
                     AccountID=account.AccountID,
                     CategoryID=cat.CategoryID,
                     Amount=_random_decimal(1500, 8000),
-                    TransactionDate=_random_date_in_month(year, month),
+                    TransactionDate=txn_date,
+                    CreatedAt=_random_timestamp_for_date(txn_date),
                     Description=random.choice(descriptions),
                 ))
                 total += 1
 
     db.commit()
-    print(f"  ✅ {total} income records seeded.")
+    print(f"  {total} income records seeded.")
     return total
 
 
@@ -522,7 +529,7 @@ def seed_expenses(
     Returns:
         Total number of Expense records inserted.
     """
-    print("  💸 Seeding expense transactions (12 months)...")
+    print("  Seeding expense transactions (12 months)...")
     months: list[tuple[int, int]] = _get_last_12_months()
     total: int = 0
 
@@ -557,23 +564,88 @@ def seed_expenses(
                 descriptions: list[str] = EXPENSE_DESCRIPTIONS.get(
                     cat.CategoryName, ["Expense payment"]
                 )
+                
+                # Randomize both logical date and database timestamp
+                txn_date = _random_date_in_month(year, month)
                 db.add(Expense(
                     UserID=user.UserID,
                     AccountID=account.AccountID,
                     CategoryID=cat.CategoryID,
                     Amount=_random_decimal(20, 1200),
-                    TransactionDate=_random_date_in_month(year, month),
+                    TransactionDate=txn_date,
+                    CreatedAt=_random_timestamp_for_date(txn_date),
                     Description=random.choice(descriptions),
                 ))
                 total += 1
 
     db.commit()
-    print(f"  ✅ {total} expense records seeded.")
+    print(f"  expense records seeded.")
     return total
 
+# =============================================================================
+# Step 3.9 — Seed Admin & Webhook Logs
+# =============================================================================
+
+def seed_admin_logs(db: Session, users: list[User]):
+    """Seeds sample administrative actions."""
+    print("  Seeding admin logs...")
+    admin = next(u for u in users if u.Role == UserRole.Admin)
+    
+    logs = [
+        AdminLog(AdminID=admin.UserID, Action="Updated System Category 'Rent'", Timestamp=datetime.now() - timedelta(days=5)),
+        AdminLog(AdminID=admin.UserID, Action=f"Locked User #{users[4].UserID} ({users[4].Email})", TargetUserID=users[4].UserID, Timestamp=datetime.now() - timedelta(days=2)),
+        AdminLog(AdminID=admin.UserID, Action="Viewed Global Analytics Report", Timestamp=datetime.now() - timedelta(hours=5)),
+    ]
+    db.add_all(logs)
+    db.commit()
+
+def seed_webhook_logs(db: Session):
+    """Seeds sample webhook traffic for health metrics."""
+    print("  Seeding webhook logs...")
+    
+    # Successes (200)
+    for i in range(15):
+        db.add(WebhookLog(
+            ExternalTransID=f"TXN-SUCCESS-{i}",
+            Status="SUCCESS",
+            StatusCode=200,
+            Detail="Transaction processed successfully",
+            Timestamp=datetime.now() - timedelta(minutes=random.randint(10, 1000))
+        ))
+        
+    # Insufficient Funds (422)
+    for i in range(3):
+        db.add(WebhookLog(
+            ExternalTransID=f"TXN-FAIL-FUNDS-{i}",
+            Status="INSUFFICIENT_FUNDS",
+            StatusCode=422,
+            Detail="Target account balance would fall below zero",
+            Timestamp=datetime.now() - timedelta(hours=random.randint(1, 24))
+        ))
+
+    # Duplicates (200 but status DUPLICATE)
+    for i in range(5):
+        db.add(WebhookLog(
+            ExternalTransID=f"TXN-DUP-{i}",
+            Status="DUPLICATE",
+            StatusCode=200,
+            Detail="Duplicate transaction ID blocked by idempotency guard",
+            Timestamp=datetime.now() - timedelta(hours=random.randint(1, 48))
+        ))
+        
+    # Critical Errors (500)
+    db.add(WebhookLog(
+        ExternalTransID="TXN-CRIT-01",
+        Status="CRITICAL_ERROR",
+        StatusCode=500,
+        Detail="Database connection timeout during processing",
+        Timestamp=datetime.now() - timedelta(days=1)
+    ))
+    
+    db.commit()
 
 # =============================================================================
-# Step 3.9 — Main Orchestrator
+# Step 3.10 — Main Orchestrator
 # =============================================================================
 
 def run_seed() -> None:
@@ -595,7 +667,7 @@ def run_seed() -> None:
     db: Session = SessionLocal()
     try:
         print("\n" + "=" * 60)
-        print("  🌱 PERSONAL FINANCE — DATA SEEDER")
+        print("  PERSONAL FINANCE - DATA SEEDER")
         print("=" * 60)
 
         clear_data(db)
@@ -606,6 +678,10 @@ def run_seed() -> None:
         seed_budgets(db, users)
         income_count: int = seed_income(db, users, accounts)
         expense_count: int = seed_expenses(db, users, accounts)
+        
+        # New: Seed Admin & Webhook Logs
+        seed_admin_logs(db, users)
+        seed_webhook_logs(db)
 
         # =====================================================================
         # Step 3.10 — Final Summary Report
@@ -615,7 +691,7 @@ def run_seed() -> None:
         total_watches: int = db.query(MarketWatch).count()
 
         print("\n" + "=" * 60)
-        print("  ✅ SEEDING COMPLETE — SUMMARY")
+        print("  SEEDING COMPLETE - SUMMARY")
         print("=" * 60)
         print(f"  {'Entity':<25} {'Count':>8}")
         print(f"  {'-'*25} {'-'*8}")
@@ -629,19 +705,20 @@ def run_seed() -> None:
         print(f"  {'-'*25} {'-'*8}")
         print(f"  {'TOTAL TRANSACTIONS':<25} {income_count + expense_count:>8}")
         print("=" * 60 + "\n")
+        print("Dataset ready for platform demonstration.")
 
     except (IntegrityError, OperationalError) as e:
         db.rollback()
         # Safe error reporting — log internal details, show clean message
-        print(f"\n  ❌ DATABASE ERROR — Seed rolled back.")
+        print(f"\n  DATABASE ERROR — Seed rolled back.")
         print(f"     Reason: {type(e).__name__}")
         print(f"     Detail: {str(e.orig) if hasattr(e, 'orig') else str(e)}")
         sys.exit(1)
 
     except Exception as e:
         db.rollback()
-        print(f"\n  ❌ UNEXPECTED ERROR — Seed rolled back.")
-        print(f"     Detail: {e}")
+        print(f"\n  UNEXPECTED ERROR - Seed rolled back.")
+        print(f"Detail: {e}")
         sys.exit(1)
 
     finally:

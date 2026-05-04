@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+
+{% block title %}Bank Sync Record - StayRichhh!!!{% endblock %}
+
+{% block extra_head %}
+<style>
+    .dashboard-layout {
+        display: flex;
+        min-height: 100vh;
+    }
+    .sidebar {
+        width: 250px;
+        padding: 30px 20px;
+        border-right: 2px solid rgba(255,255,255,0.2);
+        flex-shrink: 0;
+    }
+    .main-content {
+        flex: 1;
+        padding: 40px;
+        overflow-y: auto;
+    }
+    .nav-link {
+        color: var(--neu-text-secondary);
+        font-weight: 500;
+        margin-bottom: 10px;
+        border-radius: 12px;
+        padding: 10px 15px;
+        transition: all 0.2s ease-in-out;
+    }
+    .nav-link:hover:not(.active) {
+        color: var(--neu-primary);
+        background: var(--neu-surface);
+        box-shadow: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light);
+    }
+    .nav-link.active {
+        color: var(--neu-primary);
+        background: var(--neu-surface);
+        box-shadow: inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light);
+    }
+
+    /* ─── Live Status Badge ─── */
+    .live-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 18px;
+        border-radius: 50px;
+        background: var(--neu-surface);
+        box-shadow: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light);
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--neu-text-secondary);
+        white-space: nowrap;
+    }
+    .ping-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #22c55e;
+        position: relative;
+        flex-shrink: 0;
+    }
+    .ping-dot::after {
+        content: '';
+        position: absolute;
+        inset: -4px;
+        border-radius: 50%;
+        background: rgba(34, 197, 94, 0.4);
+        animation: ping 1.5s ease-in-out infinite;
+    }
+    @keyframes ping {
+        0%   { transform: scale(0.8); opacity: 1; }
+        70%  { transform: scale(1.8); opacity: 0; }
+        100% { transform: scale(0.8); opacity: 0; }
+    }
+
+    /* ─── Ledger Table ─── */
+    .ledger-wrapper {
+        border-radius: 20px;
+        padding: 28px 32px;
+        background: var(--neu-surface);
+        box-shadow: 8px 8px 16px var(--shadow-dark), -8px -8px 16px var(--shadow-light);
+    }
+    .ledger-wrapper .table th {
+        color: var(--neu-primary);
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        border-bottom: 2px solid rgba(255,255,255,0.08);
+        padding-bottom: 12px;
+    }
+    .ledger-wrapper .table td {
+        color: var(--neu-text-primary);
+        vertical-align: middle;
+        padding: 12px 8px;
+        border-bottom: 1px solid rgba(255,255,255,0.04);
+        font-size: 0.9rem;
+    }
+    .ledger-wrapper .table tr:last-child td {
+        border-bottom: none;
+    }
+    .ledger-wrapper .table tbody tr {
+        transition: background 0.15s ease;
+    }
+    .ledger-wrapper .table tbody tr:hover {
+        background: rgba(0, 102, 102, 0.04);
+    }
+
+    /* External ID pill — inset Neumorphism */
+    .ext-id-pill {
+        display: inline-block;
+        background: var(--neu-surface);
+        box-shadow: inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light);
+        border-radius: 6px;
+        padding: 3px 9px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.72rem;
+        color: var(--neu-text-secondary);
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* Source badge */
+    .badge-bank {
+        background: linear-gradient(135deg, #006666, #008080);
+        color: white;
+        font-size: 0.72rem;
+        padding: 4px 10px;
+        border-radius: 20px;
+        letter-spacing: 0.05em;
+    }
+    .badge-fallback {
+        background: #f39c12;
+        color: white;
+        font-size: 0.72rem;
+        padding: 4px 10px;
+        border-radius: 20px;
+    }
+
+    /* Empty state */
+    .empty-state {
+        text-align: center;
+        padding: 64px 20px;
+    }
+    .empty-state .radar-icon {
+        font-size: 3.5rem;
+        animation: pulse-icon 2.5s ease-in-out infinite;
+    }
+    @keyframes pulse-icon {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50%       { opacity: 0.6; transform: scale(1.08); }
+    }
+
+    /* Auto-refresh indicator */
+    .refresh-hint {
+        font-size: 0.75rem;
+        color: var(--neu-text-secondary);
+        opacity: 0.7;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-layout">
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <h3 class="brand-logo mb-5">
+            <span class="brand-stay">STAY</span><span class="brand-rich">RICH</span>
+        </h3>
+        <hr class="my-4" style="border-color: rgba(255,255,255,0.05);">
+        <nav class="nav flex-column">
+            <a class="nav-link" href="/dashboard"><div class="icon-box"><i data-lucide="layout-dashboard"></i></div><span>Dashboard</span></a>
+            <a class="nav-link" href="/transactions"><div class="icon-box"><i data-lucide="arrow-left-right"></i></div><span>Transactions</span></a>
+            <a class="nav-link" href="/budgets"><div class="icon-box"><i data-lucide="wallet"></i></div><span>Budgets</span></a>
+            <a class="nav-link" href="/goals"><div class="icon-box"><i data-lucide="target"></i></div><span>Goals</span></a>
+            <a class="nav-link" href="/analytics"><div class="icon-box"><i data-lucide="bar-chart-3"></i></div><span>Analytics</span></a>
+            <a class="nav-link active" href="/sync"><div class="icon-box"><i data-lucide="refresh-cw"></i></div><span>Bank Sync</span></a>
+            <hr class="my-4" style="border-color: var(--shadow-dark);">
+            <a class="nav-link text-danger" href="/api/auth/logout"><div class="icon-box"><i data-lucide="log-out"></i></div><span>Logout</span></a>
+        </nav>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+
+        <!-- Header Row -->
+        <div class="d-flex justify-content-between align-items-center mb-5">
+            <div>
+                <h2 class="mb-1 fw-bold">Bank Sync Record</h2>
+                <p class="text-muted mb-0" style="font-size: 0.9rem;">
+                    Real-time ledger of all externally-sourced banking transactions received via Webhook.
+                </p>
+            </div>
+            <div class="live-badge">
+                <span class="ping-dot"></span>
+                <span>Listening on Port 5050 (via Ngrok)</span>
+            </div>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="row mb-4" id="syncStatsRow">
+            <div class="col-md-3">
+                <div class="neu-outset p-3 text-center" style="border-radius: 16px;">
+                    <p class="text-muted small mb-1 fw-bold text-uppercase" style="letter-spacing:.08em; font-size:.72rem;">Total Synced</p>
+                    <h4 class="display-font mb-0" id="statTotal">—</h4>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="neu-outset p-3 text-center" style="border-radius: 16px;">
+                    <p class="text-muted small mb-1 fw-bold text-uppercase" style="letter-spacing:.08em; font-size:.72rem;">Synced Income</p>
+                    <h4 class="display-font mb-0 text-success" id="statIncome">—</h4>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="neu-outset p-3 text-center" style="border-radius: 16px;">
+                    <p class="text-muted small mb-1 fw-bold text-uppercase" style="letter-spacing:.08em; font-size:.72rem;">Synced Expenses</p>
+                    <h4 class="display-font mb-0 text-danger" id="statExpense">—</h4>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="neu-outset p-3 text-center" style="border-radius: 16px;">
+                    <p class="text-muted small mb-1 fw-bold text-uppercase" style="letter-spacing:.08em; font-size:.72rem;">Last Received</p>
+                    <h5 class="mb-0" id="statLastDate" style="font-size:.95rem;">—</h5>
+                </div>
+            </div>
+        </div>
+
+        <!-- Full-Width Ledger Table -->
+        <div class="ledger-wrapper">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h5 class="fw-bold mb-0" style="color: var(--neu-primary);"><i data-lucide="radio" class="me-2 text-primary"></i>Incoming Bank Signals</h5>
+                <div class="d-flex align-items-center gap-3">
+                    <span class="refresh-hint" id="lastRefreshedLabel">Refreshes every 10s</span>
+                    <button class="neu-btn-primary btn-sm px-3" id="manualRefreshBtn" title="Refresh now"><i data-lucide="refresh-cw" class="me-2" style="width: 14px; height: 14px;"></i>Refresh</button>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-borderless mb-0">
+                    <thead>
+                        <tr>
+                            <th>Date &amp; Time</th>
+                            <th>Description</th>
+                            <th>Category</th>
+                            <th>Type</th>
+                            <th>Account</th>
+                            <th>Amount</th>
+                            <th>External Bank ID</th>
+                        </tr>
+                    </thead>
+                    <tbody id="syncTableBody">
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Update Category Modal -->
+    <div class="modal fade" id="updateCategoryModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content neu-outset border-0" style="border-radius: 20px;">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold" style="color: var(--neu-primary);">Update Category</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="updateCategoryForm">
+                    <input type="hidden" id="editTxnId">
+                    <input type="hidden" id="editTxnType">
+                    <div class="modal-body py-4">
+                        <div class="mb-0">
+                            <label class="form-label text-muted small fw-bold">Select Category</label>
+                            <select id="categorySelect" name="category_id" class="form-select neu-inset border-0" required>
+                                <option value="">Loading...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0 pt-0">
+                        <button type="button" class="neu-btn-secondary btn-sm px-4" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="neu-btn-primary btn-sm px-4">Update</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/sync.js') }}"></script>
+{% endblock %}

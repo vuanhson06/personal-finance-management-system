@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics - StayRichhh!!!{% endblock %}
+
+{% block extra_head %}
+<style>
+    .dashboard-layout {
+        display: flex;
+        min-height: 100vh;
+    }
+    .sidebar {
+        width: 250px;
+        padding: 30px 20px;
+        border-right: 2px solid rgba(255,255,255,0.2);
+    }
+    .main-content {
+        flex: 1;
+        padding: 40px;
+        overflow-y: auto;
+    }
+    .nav-link {
+        color: var(--neu-text-secondary);
+        font-weight: 500;
+        margin-bottom: 10px;
+        border-radius: 12px;
+        padding: 10px 15px;
+        transition: all 0.2s ease-in-out;
+    }
+    .nav-link:hover, .nav-link.active {
+        color: var(--neu-primary);
+        background: var(--neu-surface);
+        box-shadow: inset 4px 4px 8px #c4c3c2, inset -4px -4px 8px #ffffff;
+    }
+    .nav-link:hover:not(.active) {
+        box-shadow: 4px 4px 8px #c4c3c2, -4px -4px 8px #ffffff;
+    }
+
+    .chart-card {
+        padding: 24px;
+        border-radius: 20px;
+        margin-bottom: 24px;
+        background: var(--neu-surface);
+        height: 400px;
+        display: flex;
+        flex-direction: column;
+    }
+    .chart-container {
+        flex: 1;
+        position: relative;
+    }
+
+    .table-card {
+        padding: 24px;
+        border-radius: 20px;
+        background: var(--neu-surface);
+    }
+    .table th {
+        color: var(--neu-primary);
+        border-bottom: 2px solid rgba(0,0,0,0.1);
+    }
+    .table td {
+        color: var(--neu-text-primary);
+        vertical-align: middle;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <h3 class="brand-logo mb-5">
+            <span class="brand-stay">STAY</span><span class="brand-rich">RICH</span>
+        </h3>
+        <hr class="my-4" style="border-color: rgba(255,255,255,0.05);">
+        <nav class="nav flex-column">
+            <a class="nav-link" href="/dashboard"><div class="icon-box"><i data-lucide="layout-dashboard"></i></div><span>Dashboard</span></a>
+            <a class="nav-link" href="/transactions"><div class="icon-box"><i data-lucide="arrow-left-right"></i></div><span>Transactions</span></a>
+            <a class="nav-link" href="/budgets"><div class="icon-box"><i data-lucide="wallet"></i></div><span>Budgets</span></a>
+            <a class="nav-link" href="/goals"><div class="icon-box"><i data-lucide="target"></i></div><span>Goals</span></a>
+            <a class="nav-link active" href="/analytics"><div class="icon-box"><i data-lucide="bar-chart-3"></i></div><span>Analytics</span></a>
+            <a class="nav-link" href="/sync"><div class="icon-box"><i data-lucide="refresh-cw"></i></div><span>Sync</span></a>
+            <hr class="my-4" style="border-color: #c4c3c2;">
+            <a class="nav-link text-danger" href="/api/auth/logout"><div class="icon-box"><i data-lucide="log-out"></i></div><span>Logout</span></a>
+        </nav>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <h2 class="mb-4">Visual Analytics & Reporting</h2>
+        
+        <!-- Top Row: Charts -->
+        <div class="row">
+            <!-- Monthly Trend Line Chart -->
+            <div class="col-md-8">
+                <div class="neu-outset chart-card">
+                    <h4 class="mb-3 text-muted">Monthly Cashflow Trend</h4>
+                    <div class="chart-container">
+                        <canvas id="monthlyTrendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Category Doughnut Chart -->
+            <div class="col-md-4">
+                <div class="neu-outset chart-card">
+                    <h4 class="mb-3 text-muted">Category Breakdown</h4>
+                    <div class="chart-container">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Row: Historical Table -->
+        <div class="row mt-2">
+            <div class="col-12">
+                <div class="neu-outset table-card">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h4 class="mb-0 text-muted">Historical Transactions</h4>
+                        <div style="width: 300px;">
+                            <input type="text" id="transactionSearch" class="form-control neu-inset" placeholder="Search description, date...">
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-hover table-borderless" id="transactionTable">
+                            <thead style="position: sticky; top: 0; background: var(--neu-surface); z-index: 1;">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Description</th>
+                                    <th>Category</th>
+                                    <th>Account ID</th>
+                                    <th>Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">Loading historical data...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/analytics.js') }}"></script>
+{% endblock %}

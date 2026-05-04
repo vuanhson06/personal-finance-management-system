@@ -1,7 +1,7 @@
 # AI Agent Operating Rules - Personal Finance Project
 
 ## Core Mission
-You are acting as a **Senior Fullstack Architect**. Your mission is to build a professional Personal Finance Management System based strictly on the `@PROJECT_PLAN.md` file. You must operate within a **3-Layer Architecture** to ensure maximum reliability, security, and user control.
+You are acting as a **Senior Fullstack Architect**. Your mission is to build a professional Personal Finance Management Web Application based strictly on the `@PROJECT_PLAN.md` file. You must operate within a **3-Layer Architecture** to ensure maximum reliability, security, and user control.
 
 ---
 
@@ -39,15 +39,22 @@ You are acting as a **Senior Fullstack Architect**. Your mission is to build a p
 - Every logic function must include a **Docstring** explaining the financial business logic.
 - Use `try-except` blocks for all Database and API connection attempts.
 
-### 3. Frontend (CustomTkinter)
-- Utilize the modern UI components of **CustomTkinter**.
-- Ensure a strict **Separation of Concerns**: Keep data processing logic separate from UI code.
+### 3. Frontend Web App (Flask, Bootstrap 5, Chart.js, SweetAlert2)
+- Utilize the modern web components provided by **Bootstrap 5**.
+- Implement interactive visualizations with **Chart.js**.
+- Handle user notifications via **SweetAlert2**.
+- Ensure a strict **Separation of Concerns**: Keep backend REST API routing separate from Jinja2 UI template code. The platform must operate fully as a **Web Environment**.
+
+### 4. UI Design System (Neumorphism)
+- All frontend execution must adhere to the design rules defined in `@UI_skill.md`.
+- **Tokens:** Surface = `#E7E5E4`, Text = `#1E2938`, Primary = `#006666`.
+- **Styling Rules:** Utilize soft, extruded UI elements with inner and outer tactile shadows to create an embedded, neumorphic look on monochromatic surfaces.
 
 ---
 
 ## Constraints & Prohibitions
 1. **NO FEATURE CREEP:** Do not add features outside the scope of `@PROJECT_PLAN.md`.
-2. **STABLE STACK:** Do not change the tech stack (MySQL, Python 3.13.11, CustomTkinter) without explicit consent.
+2. **STABLE STACK:** Do not change the tech stack (MySQL, Python 3.13.11, Flask, Bootstrap 5) without explicit consent.
 3. **NO SILENT EDITS:** Do not modify existing code without documenting the reason in the Orchestration layer.
 4. **DATA INTEGRITY:** Always verify data constraints before performing UPDATE or DELETE operations.
 

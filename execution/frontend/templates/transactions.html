@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}Transactions - StayRichhh!!!{% endblock %}
+
+{% block extra_head %}
+<style>
+    .dashboard-layout {
+        display: flex;
+        min-height: 100vh;
+    }
+    .sidebar {
+        width: 250px;
+        padding: 30px 20px;
+        border-right: 2px solid rgba(255,255,255,0.2);
+    }
+    .main-content {
+        flex: 1;
+        padding: 40px;
+        overflow-y: auto;
+    }
+    .nav-link {
+        color: var(--neu-text-secondary);
+        font-weight: 500;
+        margin-bottom: 10px;
+        border-radius: 12px;
+        padding: 10px 15px;
+        transition: all 0.2s ease-in-out;
+    }
+    .nav-link:hover {
+        color: var(--neu-primary);
+        background: var(--neu-surface);
+        box-shadow: 4px 4px 8px #c4c3c2, -4px -4px 8px #ffffff;
+    }
+    .nav-link.active {
+        color: var(--neu-primary);
+        background: var(--neu-surface);
+        box-shadow: inset 4px 4px 8px #c4c3c2, inset -4px -4px 8px #ffffff;
+    }
+    .transaction-item {
+        padding: 15px;
+        border-radius: 15px;
+        margin-bottom: 15px;
+    }
+    .account-item {
+        padding: 15px;
+        border-radius: 15px;
+        margin-bottom: 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <h3 class="brand-logo mb-5">
+            <span class="brand-stay">STAY</span><span class="brand-rich">RICH</span>
+        </h3>
+        <hr class="my-4" style="border-color: rgba(255,255,255,0.05);">
+        <nav class="nav flex-column">
+            <a class="nav-link" href="/dashboard"><div class="icon-box"><i data-lucide="layout-dashboard"></i></div><span>Dashboard</span></a>
+            <a class="nav-link active" href="/transactions"><div class="icon-box"><i data-lucide="arrow-left-right"></i></div><span>Transactions</span></a>
+            <a class="nav-link" href="/budgets"><div class="icon-box"><i data-lucide="wallet"></i></div><span>Budgets</span></a>
+            <a class="nav-link" href="/goals"><div class="icon-box"><i data-lucide="target"></i></div><span>Goals</span></a>
+            <a class="nav-link" href="/analytics"><div class="icon-box"><i data-lucide="bar-chart-3"></i></div><span>Analytics</span></a>
+            <a class="nav-link" href="/sync"><div class="icon-box"><i data-lucide="refresh-cw"></i></div><span>Sync</span></a>
+            <hr class="my-4" style="border-color: #c4c3c2;">
+            <a class="nav-link text-danger" href="/api/auth/logout"><div class="icon-box"><i data-lucide="log-out"></i></div><span>Logout</span></a>
+        </nav>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <h2 class="mb-4">Account & Transaction Manager</h2>
+        
+        <div class="row">
+            <!-- Left Column: History -->
+            <div class="col-md-7">
+                <div class="neu-outset p-4 mb-4">
+                    <h4 class="mb-4">My Accounts</h4>
+                    <div id="accountsListContainer">
+                        <p class="text-muted">Loading accounts...</p>
+                    </div>
+                </div>
+
+                <div class="neu-outset p-4">
+                    <h4 class="mb-4">Recent Transactions</h4>
+                    <div id="transactionsListContainer">
+                        <p class="text-muted">Loading transactions...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Forms -->
+            <div class="col-md-5">
+                <!-- Add Account Form -->
+                <div class="neu-outset p-4 mb-4">
+                    <h4 class="mb-3">Add Bank Account</h4>
+                    <form id="addAccountForm">
+                        <div class="mb-3">
+                            <label class="form-label text-muted ms-2">Account Name</label>
+                            <input type="text" class="form-control neu-inset w-100" name="account_name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-muted ms-2">Account Number</label>
+                            <input type="text" class="form-control neu-inset w-100" name="account_number" required>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label text-muted ms-2">Initial Balance</label>
+                            <input type="number" step="0.01" class="form-control neu-inset w-100" name="initial_balance" required>
+                        </div>
+                        <button type="submit" class="neu-btn w-100" style="color: var(--neu-primary);"><i data-lucide="plus" class="me-2" style="width: 18px; height: 18px;"></i>Add Account</button>
+                    </form>
+                </div>
+
+                <!-- Add Transaction Form -->
+                <div class="neu-outset p-4">
+                    <h4 class="mb-3">Record Transaction</h4>
+                    <form id="addTransactionForm">
+                        <div class="mb-3">
+                            <label class="form-label text-muted ms-2">Type</label>
+                            <select class="form-control neu-inset w-100" name="type" id="txnTypeSelect" required>
+                                <option value="Expense">Expense (Outflow)</option>
+                                <option value="Income">Income (Inflow)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-muted ms-2">Account</label>
+                            <select class="form-control neu-inset w-100" name="account_id" id="accountSelect" required>
+                                <option value="">Loading...</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-muted ms-2 d-flex justify-content-between align-items-center">
+                                Category
+                                <button type="button" class="btn btn-sm btn-link text-decoration-none" style="color: var(--neu-primary);" data-bs-toggle="modal" data-bs-target="#categoryModal"><i data-lucide="settings" style="width: 14px; height: 14px; margin-right: 4px;"></i>Manage</button>
+                            </label>
+                            <select class="form-control neu-inset w-100" name="category_id" id="categorySelect" required>
+                                <option value="">Loading...</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-muted ms-2">Amount</label>
+                            <input type="number" step="0.01" class="form-control neu-inset w-100" name="amount" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-muted ms-2">Date</label>
+                            <input type="date" class="form-control neu-inset w-100" name="date" required>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label text-muted ms-2">Description</label>
+                            <input type="text" class="form-control neu-inset w-100" name="description">
+                        </div>
+                        <button type="submit" class="neu-btn-primary w-100">Submit Transaction</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Manage Categories Modal -->
+<div class="modal fade" id="categoryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content neu-outset" style="background: var(--neu-surface);">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title">Manage Custom Categories</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addCategoryForm" class="mb-4">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-sm-5">
+                            <label class="form-label text-muted ms-1 small">Name</label>
+                            <input type="text" class="form-control neu-inset" name="name" required placeholder="e.g. Hobbies">
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label text-muted ms-1 small">Type</label>
+                            <select class="form-control neu-inset" name="type" required>
+                                <option value="Expense">Expense</option>
+                                <option value="Income">Income</option>
+                            </select>
+                        </div>
+                        <div class="col-sm-3">
+                            <button type="submit" class="neu-btn w-100" style="color: var(--neu-success);">+ Add</button>
+                        </div>
+                    </div>
+                </form>
+
+                <h6 class="text-muted mb-3">My Categories</h6>
+                <div id="categoryListContainer" style="max-height: 300px; overflow-y: auto;">
+                    <!-- Categories injected here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/transactions.js') }}?v=1.1"></script>
+{% endblock %}

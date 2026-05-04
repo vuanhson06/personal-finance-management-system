@@ -5,11 +5,12 @@
 - **Python Version:** 3.13.11 (Strictly enforced)
 - **Database:** MySQL Server (8.0+)
 - **ORM:** SQLAlchemy 2.0+
-- **Frontend UI:** CustomTkinter (Modern UI library for Python)
-- **Key Libraries:** - `bcrypt` (Security)
+- **Frontend Web App:** Flask (Web Framework & REST API), Jinja2 (HTML Templating)
+- **Frontend UI Library:** Bootstrap 5, Chart.js, SweetAlert2
+- **Key Libraries:** 
+    - `bcrypt` (Security)
     - `faker` (Data Seeding)
     - `yfinance` (Market Data)
-    - `matplotlib` / `customtkinter-charts` (Visual Analytics)
     - `python-dotenv` (Environment Variables)
 
 ---
@@ -95,30 +96,41 @@
 - **Category Auto-Resolution:** Users never select a category manually for goal operations; the service resolves `Savings` or `Savings Withdraw` by name from the user's own `Categories` table.
 - **Data Integrity:** `CurrentAmount` is never allowed to go negative. All validation occurs before the transaction record is created.
 
----
-
-## Part 3: Frontend Python App (The Interface)
-*Focus: Modern UI using CustomTkinter for user interaction.*
-
-### Step 1: Authentication & Access Portal
-- Build Login and Sign-up screens with fields for Email, PhoneNumber, and Password. (CustomTkinter frames).
-- Implement User Profile Management interface.
-- Implement Conditional Rendering based on user roles (e.g., hide/show administrative tools based on the Role column).
-
-### Step 2: Primary Financial Dashboard
-- High-level overview: Total Balance, Month Spending (Large Labels/Cards).
-- Real-time Market Ticker (Horizontal scrolling or auto-updating list).
-
-### Step 3: Transaction & Budget Manager
-- Interactive forms for adding/editing transactions.
-- Budget Planning UI: Set limits per category.
-
-### Step 4: Visual Reporting System
-- **Graphical Reports:** Integrate Matplotlib charts into CustomTkinter frames using `FigureCanvasTkAgg` (Pie/Line charts).
-- **Tabular Summaries:** Searchable and filterable table widgets to display daily, monthly, and yearly financial activities.
-
-### Step 5: Alerting & Notification System
-- Logic to monitor spending vs. budget in real-time.
-- **Visual Alerts:** Progress bars that turn RED when spending > 80% of budget.
+### Step 7: API Routing Layer (Bridge)
+*Focus: Connecting the Python backend to the Web Frontend.*
+- **REST API Endpoints:** Establish a Flask routing layer (e.g., `app.py` or `routes/` module) to expose core Python logic (`transaction_service`, `budget_service`, `saving_service`, etc.) to the JavaScript frontend.
+- **Example Routes:** `/api/expenses`, `/api/goals/contribute`, `/api/goals/withdraw`.
 
 ---
+
+## Part 3: Frontend Web App (The Interface)
+*Focus: Modern Web UI using Bootstrap 5 and asynchronous JavaScript (Fetch API).*
+
+### Step 1: Authentication & Session Management
+- **Auth Portal:** Build Login and Sign-up screens using Bootstrap forms.
+- **Session State:** Use Flask-Session to manage logged-in states and secure routes.
+
+### Step 2: Primary Financial Dashboard & Market Watch
+- **Dashboard Overview:** Use Bootstrap cards to display Total Balance and Month Spending.
+- **Real-time Market Ticker:** Build a JS-based real-time ticker for Gold, Stock, and Crypto prices.
+
+### Step 3: Account & Transaction Manager
+- **Bank Account Manager:** UI to add accounts, displaying the mapped `AccountNumber`.
+- **Transaction Entry (AJAX):** Build forms using Bootstrap. Implement the **Strict Balance Guard** via JavaScript (Fetch API calling the new endpoints).
+- **SweetAlert2 Integration:** If the backend returns HTTP 422 (Insufficient Funds), immediately display a SweetAlert2 error modal to the user.
+
+### Step 4: Saving Goals Module
+- **Goal Dashboards:** Create Bootstrap cards with dynamic progress bars for each goal.
+- **Goal Actions:** Implement "Contribute" and "Withdraw" actions using asynchronous Fetch API requests to the routing layer.
+
+### Step 5: Webhook Sync Monitor
+- **Sync Dashboard:** Build a tabular view to monitor transactions automatically pulled via the Webhook Simulator.
+- Display idempotency status and categorizations applied by the "Others" fallback logic.
+
+### Step 6: Visual Analytics & Reporting
+- **Interactive Charts (Chart.js):** Flask endpoints will provide JSON data, and Chart.js will render interactive charts for trend analysis and category-wise spending on `<canvas>` elements.
+- **Tabular Summaries:** Searchable and filterable data tables for historical transactions.
+
+### Step 7: Web Budget Planner & Visual Alerts
+- **Budget Manager UI:** A dedicated interface to set and edit monthly spending limits.
+- **Visual Alert Logic:** Use Bootstrap progress bars that turn **RED** (`bg-danger`) when spending reaches 80% of the defined budget.

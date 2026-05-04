@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Budgets - StayRichhh!!!{% endblock %}
+
+{% block extra_head %}
+<style>
+    .dashboard-layout {
+        display: flex;
+        min-height: 100vh;
+    }
+    .sidebar {
+        width: 250px;
+        padding: 30px 20px;
+        border-right: 2px solid rgba(255,255,255,0.2);
+    }
+    .main-content {
+        flex: 1;
+        padding: 40px;
+        overflow-y: auto;
+    }
+    .nav-link {
+        color: var(--neu-text-secondary);
+        font-weight: 500;
+        margin-bottom: 10px;
+        border-radius: 12px;
+        padding: 10px 15px;
+        transition: all 0.2s ease-in-out;
+    }
+    .nav-link:hover, .nav-link.active {
+        color: var(--neu-primary);
+        background: var(--neu-surface);
+        box-shadow: inset 4px 4px 8px #c4c3c2, inset -4px -4px 8px #ffffff;
+    }
+    .nav-link:hover:not(.active) {
+        box-shadow: 4px 4px 8px #c4c3c2, -4px -4px 8px #ffffff;
+    }
+    
+    .budget-card {
+        padding: 24px;
+        border-radius: 20px;
+        margin-bottom: 24px;
+        background: var(--neu-surface);
+    }
+    .progress {
+        height: 20px;
+        border-radius: 10px;
+        background-color: rgba(0,0,0,0.05);
+        box-shadow: inset 2px 2px 5px rgba(0,0,0,0.1);
+        margin: 15px 0;
+    }
+    .progress-bar {
+        border-radius: 10px;
+        transition: width 0.5s ease, background-color 0.5s ease;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <h3 class="brand-logo mb-5">
+            <span class="brand-stay">STAY</span><span class="brand-rich">RICH</span>
+        </h3>
+        <hr class="my-4" style="border-color: rgba(255,255,255,0.05);">
+        <nav class="nav flex-column">
+            <a class="nav-link" href="/dashboard"><div class="icon-box"><i data-lucide="layout-dashboard"></i></div><span>Dashboard</span></a>
+            <a class="nav-link" href="/transactions"><div class="icon-box"><i data-lucide="arrow-left-right"></i></div><span>Transactions</span></a>
+            <a class="nav-link active" href="/budgets"><div class="icon-box"><i data-lucide="wallet"></i></div><span>Budgets</span></a>
+            <a class="nav-link" href="/goals"><div class="icon-box"><i data-lucide="target"></i></div><span>Goals</span></a>
+            <a class="nav-link" href="/analytics"><div class="icon-box"><i data-lucide="bar-chart-3"></i></div><span>Analytics</span></a>
+            <a class="nav-link" href="/sync"><div class="icon-box"><i data-lucide="refresh-cw"></i></div><span>Sync</span></a>
+            <hr class="my-4" style="border-color: #c4c3c2;">
+            <a class="nav-link text-danger" href="/api/auth/logout"><div class="icon-box"><i data-lucide="log-out"></i></div><span>Logout</span></a>
+        </nav>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0">Budget Planner</h2>
+            <button class="neu-btn-primary" data-bs-toggle="modal" data-bs-target="#createBudgetModal"><i data-lucide="plus" class="me-2" style="width: 18px; height: 18px;"></i>Set Budget</button>
+        </div>
+
+        <div class="row" id="budgetsContainer">
+            <div class="col-12 text-center text-muted">Loading budgets...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Budget Modal -->
+<div class="modal fade" id="createBudgetModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content neu-outset border-0" style="background: var(--neu-surface);">
+      <div class="modal-header border-0">
+        <h5 class="modal-title fw-bold">Set Monthly Limit</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="createBudgetForm">
+            <div class="mb-3">
+                <label class="form-label ms-2 text-muted">Category</label>
+                <select class="form-control neu-inset w-100" name="category_id" id="categorySelect" required>
+                    <option value="">Loading...</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label ms-2 text-muted">Limit Amount</label>
+                <input type="number" step="0.01" class="form-control neu-inset w-100" name="limit_amount" required>
+            </div>
+            <div class="mb-4">
+                <label class="form-label ms-2 text-muted">Period (YYYY-MM)</label>
+                <input type="month" class="form-control neu-inset w-100" name="period" required>
+            </div>
+            <button type="submit" class="neu-btn-primary w-100">Save Budget</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/budgets.js') }}"></script>
+{% endblock %}
