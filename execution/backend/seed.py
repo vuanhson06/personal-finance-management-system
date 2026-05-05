@@ -5,12 +5,12 @@ Generates and inserts realistic financial data into the `personal_finance`
 database for development and demonstration purposes.
 
 Dataset Generated:
-    - 5 Users        (1 Admin + 4 regular Users)
-    - 10 BankAccounts (2 per User)
-    - 15 MarketWatch  (3 assets per User)
-    - ~20 Budgets     (up to 4 expense-category budgets per User)
-    - ~60 Income      (~3 per User per month, last 12 months)
-    - ~240 Expenses   (~4 per User per month, last 12 months)
+    - 10 Users        (1 Admin + 9 regular Users)
+    - 25 BankAccounts (~2-3 per User)
+    - 50 MarketWatch  (~5 assets per User)
+    - ~60 Budgets     (up to 6 expense-category budgets per User)
+    - ~1,200 Income   (~5 per User per month, last 24 months)
+    - ~3,000 Expenses (~12 per User per month, last 24 months)
 
 Design Rules:
     - Idempotent: `clear_data()` wipes existing seed data before re-seeding.
@@ -60,6 +60,13 @@ RANDOM_SEED: int = 42
 faker: Faker = Faker("en_US")
 Faker.seed(RANDOM_SEED)
 random.seed(RANDOM_SEED)
+
+# Scaling Constants
+NUM_USERS: int = 10
+HISTORY_MONTHS: int = 24
+INCOME_PER_MONTH: int = 5
+EXPENSES_PER_MONTH: int = 12
+ASSETS_PER_USER: int = 5
 
 # Asset watchlist pool — realistic symbols with typed labels
 ASSET_POOL: list[dict] = [
@@ -151,17 +158,20 @@ def _random_timestamp_for_date(d: date) -> datetime:
     )
 
 
-def _get_last_12_months() -> list[tuple[int, int]]:
+def _get_last_n_months(n: int) -> list[tuple[int, int]]:
     """
-    Returns a list of (year, month) tuples covering the last 12 calendar months,
+    Returns a list of (year, month) tuples covering the last n calendar months,
     ordered chronologically from oldest to most recent.
 
+    Args:
+        n: Number of months to generate.
+
     Returns:
-        List of (year, month) tuples, e.g., [(2025, 4), ..., (2026, 3)].
+        List of (year, month) tuples, e.g., [(2024, 4), ..., (2026, 3)].
     """
     today: date = date.today()
     months: list[tuple[int, int]] = []
-    for i in range(11, -1, -1):
+    for i in range(n - 1, -1, -1):
         month: int = today.month - i
         year: int = today.year
         while month <= 0:
@@ -255,35 +265,47 @@ def seed_users(db: Session) -> list[User]:
             "Role":     UserRole.Admin,
         },
         {
-            "UserName": faker.name(),
+            "UserName": "Alice Johnson",
             "Email":    "alice.johnson@email.com",
             "Phone":    "+1-555-010-1001",
             "Password": "AlicePass@2026",
             "Role":     UserRole.User,
         },
         {
-            "UserName": faker.name(),
+            "UserName": "Bob Martinez",
             "Email":    "bob.martinez@email.com",
             "Phone":    "+1-555-020-2002",
             "Password": "BobPass@2026",
             "Role":     UserRole.User,
         },
         {
-            "UserName": faker.name(),
+            "UserName": "Carol White",
             "Email":    "carol.white@email.com",
             "Phone":    "+1-555-030-3003",
             "Password": "CarolPass@2026",
             "Role":     UserRole.User,
         },
         {
-            "UserName": faker.name(),
+            "UserName": "David Chen",
             "Email":    "david.chen@email.com",
             "Phone":    "+1-555-040-4004",
             "Password": "DavidPass@2026",
             "Role":     UserRole.User,
             "IsActive": False, # David is locked for testing
-        },
+        }
     ]
+
+    # Dynamically add more users to reach NUM_USERS
+    while len(users_data) < NUM_USERS:
+        name = faker.name()
+        first_name = name.split()[0].lower()
+        users_data.append({
+            "UserName": name,
+            "Email":    f"{first_name}.{faker.last_name().lower()}@{faker.free_email_domain()}",
+            "Phone":    faker.phone_number(),
+            "Password": f"{first_name.capitalize()}Pass@2026",
+            "Role":     UserRole.User,
+        })
 
     users: list[User] = []
     for data in users_data:
@@ -367,7 +389,8 @@ def seed_market_watches(db: Session, users: list[User]) -> None:
     print("  Seeding market watchlists...")
     count: int = 0
     for user in users:
-        chosen_assets: list[dict] = random.sample(ASSET_POOL, k=3)
+        # Use scaled constant for watchlist size
+        chosen_assets: list[dict] = random.sample(ASSET_POOL, k=min(ASSETS_PER_USER, len(ASSET_POOL)))
         for asset in chosen_assets:
             db.add(MarketWatch(
                 UserID=user.UserID,
@@ -409,9 +432,9 @@ def seed_budgets(db: Session, users: list[User]) -> None:
             )
         ).scalars().all()
 
-        # Pick up to 4 categories for budgeting
+        # Pick up to 6 categories for budgeting
         selected: list[Category] = random.sample(
-            expense_cats, k=min(4, len(expense_cats))
+            expense_cats, k=min(6, len(expense_cats))
         )
         for cat in selected:
             db.add(Budget(
@@ -454,8 +477,8 @@ def seed_income(
     Returns:
         Total number of Income records inserted.
     """
-    print("  Seeding income transactions (12 months)...")
-    months: list[tuple[int, int]] = _get_last_12_months()
+    print(f"  Seeding income transactions ({HISTORY_MONTHS} months)...")
+    months: list[tuple[int, int]] = _get_last_n_months(HISTORY_MONTHS)
     total: int = 0
 
     for user in users:
@@ -478,8 +501,9 @@ def seed_income(
             continue
 
         for year, month in months:
-            # Generate 3 income entries per month
-            for _ in range(3):
+            # Generate random number of income entries per month
+            count = random.randint(INCOME_PER_MONTH - 1, INCOME_PER_MONTH + 2)
+            for _ in range(count):
                 cat: Category = random.choice(income_cats)
                 account: BankAccount = random.choice(user_accounts)
                 descriptions: list[str] = INCOME_DESCRIPTIONS.get(
@@ -529,8 +553,8 @@ def seed_expenses(
     Returns:
         Total number of Expense records inserted.
     """
-    print("  Seeding expense transactions (12 months)...")
-    months: list[tuple[int, int]] = _get_last_12_months()
+    print(f"  Seeding expense transactions ({HISTORY_MONTHS} months)...")
+    months: list[tuple[int, int]] = _get_last_n_months(HISTORY_MONTHS)
     total: int = 0
 
     for user in users:
@@ -559,7 +583,10 @@ def seed_expenses(
             continue
 
         for year, month in months:
-            for cat in user_expense_cats:
+            # Random number of expenses per month
+            count = random.randint(EXPENSES_PER_MONTH - 3, EXPENSES_PER_MONTH + 5)
+            for _ in range(count):
+                cat = random.choice(user_expense_cats)
                 account: BankAccount = random.choice(user_accounts)
                 descriptions: list[str] = EXPENSE_DESCRIPTIONS.get(
                     cat.CategoryName, ["Expense payment"]
@@ -587,61 +614,60 @@ def seed_expenses(
 # =============================================================================
 
 def seed_admin_logs(db: Session, users: list[User]):
-    """Seeds sample administrative actions."""
+    """Seeds a larger set of administrative actions."""
     print("  Seeding admin logs...")
     admin = next(u for u in users if u.Role == UserRole.Admin)
+    other_users = [u for u in users if u.Role == UserRole.User]
     
-    logs = [
-        AdminLog(AdminID=admin.UserID, Action="Updated System Category 'Rent'", Timestamp=datetime.now() - timedelta(days=5)),
-        AdminLog(AdminID=admin.UserID, Action=f"Locked User #{users[4].UserID} ({users[4].Email})", TargetUserID=users[4].UserID, Timestamp=datetime.now() - timedelta(days=2)),
-        AdminLog(AdminID=admin.UserID, Action="Viewed Global Analytics Report", Timestamp=datetime.now() - timedelta(hours=5)),
+    actions = [
+        "Updated System Category", "Viewed Global Analytics", 
+        "Exported Database Backup", "Modified Interest Rates",
+        "Reviewed Security Audit", "Updated Webhook Endpoint"
     ]
-    db.add_all(logs)
+    
+    for _ in range(20):
+        target = random.choice(other_users)
+        action = random.choice(actions)
+        db.add(AdminLog(
+            AdminID=admin.UserID,
+            Action=f"{action} (Target: {target.Email})",
+            TargetUserID=target.UserID,
+            Timestamp=datetime.now() - timedelta(days=random.randint(1, 30), hours=random.randint(0, 23))
+        ))
     db.commit()
 
 def seed_webhook_logs(db: Session):
-    """Seeds sample webhook traffic for health metrics."""
+    """Seeds a larger set of webhook traffic for health metrics."""
     print("  Seeding webhook logs...")
     
     # Successes (200)
-    for i in range(15):
+    for i in range(40):
         db.add(WebhookLog(
-            ExternalTransID=f"TXN-SUCCESS-{i}",
+            ExternalTransID=f"TXN-SUCCESS-{faker.uuid4()[:8]}",
             Status="SUCCESS",
             StatusCode=200,
             Detail="Transaction processed successfully",
-            Timestamp=datetime.now() - timedelta(minutes=random.randint(10, 1000))
+            Timestamp=datetime.now() - timedelta(minutes=random.randint(5, 5000))
         ))
         
-    # Insufficient Funds (422)
-    for i in range(3):
-        db.add(WebhookLog(
-            ExternalTransID=f"TXN-FAIL-FUNDS-{i}",
-            Status="INSUFFICIENT_FUNDS",
-            StatusCode=422,
-            Detail="Target account balance would fall below zero",
-            Timestamp=datetime.now() - timedelta(hours=random.randint(1, 24))
-        ))
-
-    # Duplicates (200 but status DUPLICATE)
-    for i in range(5):
-        db.add(WebhookLog(
-            ExternalTransID=f"TXN-DUP-{i}",
-            Status="DUPLICATE",
-            StatusCode=200,
-            Detail="Duplicate transaction ID blocked by idempotency guard",
-            Timestamp=datetime.now() - timedelta(hours=random.randint(1, 48))
-        ))
-        
-    # Critical Errors (500)
-    db.add(WebhookLog(
-        ExternalTransID="TXN-CRIT-01",
-        Status="CRITICAL_ERROR",
-        StatusCode=500,
-        Detail="Database connection timeout during processing",
-        Timestamp=datetime.now() - timedelta(days=1)
-    ))
+    # Errors (400, 422, 500)
+    error_types = [
+        ("INSUFFICIENT_FUNDS", 422, "Target account balance would fall below zero"),
+        ("INVALID_ACCOUNT", 400, "Account number not found"),
+        ("GATEWAY_TIMEOUT", 504, "Upstream bank did not respond"),
+        ("UNAUTHORIZED", 401, "Invalid API key provided"),
+        ("DUPLICATE", 200, "Duplicate transaction ID blocked by idempotency guard")
+    ]
     
+    for _ in range(15):
+        status, code, detail = random.choice(error_types)
+        db.add(WebhookLog(
+            ExternalTransID=f"TXN-FAIL-{faker.uuid4()[:8]}",
+            Status=status,
+            StatusCode=code,
+            Detail=detail,
+            Timestamp=datetime.now() - timedelta(minutes=random.randint(5, 5000))
+        ))
     db.commit()
 
 # =============================================================================
