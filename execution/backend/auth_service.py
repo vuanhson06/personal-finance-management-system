@@ -220,10 +220,15 @@ def login_user(email: str, password: str, db: Session) -> User:
         select(User).where(User.Email == email.strip().lower())
     ).scalar_one_or_none()
 
-    # Use a single generic error to prevent email enumeration attacks
+    # Use a single generic error for credential failures to prevent email enumeration,
+    # but provide a specific message for locked accounts as that is a state issue, not a credential one.
     if user is None or not user.verify_password(password):
         logger.warning("Failed login attempt for email: '%s'.", email)
         raise ValueError("Invalid email or password.")
+
+    if not user.IsActive:
+        logger.warning("Blocked login attempt for deactivated account: '%s'.", email)
+        raise ValueError("Your account has been deactivated. Please contact support.")
 
     logger.info(
         "User logged in: id=%d email='%s' role=%s.",

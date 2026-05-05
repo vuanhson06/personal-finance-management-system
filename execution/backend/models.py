@@ -28,6 +28,7 @@ from sqlalchemy import (
     DateTime,
     Enum as SAEnum,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
@@ -302,13 +303,26 @@ class BankAccount(Base):
     # --- Relationships ---
     user: Mapped["User"] = relationship("User", back_populates="bank_accounts")
     incomes: Mapped[list["Income"]] = relationship(
-        "Income", back_populates="bank_account", cascade="all, delete-orphan"
+        "Income", back_populates="bank_account", cascade="all, delete-orphan",
+        overlaps="incomes"
     )
     expenses: Mapped[list["Expense"]] = relationship(
-        "Expense", back_populates="bank_account", cascade="all, delete-orphan"
+        "Expense", back_populates="bank_account", cascade="all, delete-orphan",
+        overlaps="expenses"
     )
     monthly_closures: Mapped[list["MonthlyClosure"]] = relationship(
         "MonthlyClosure", back_populates="bank_account", cascade="all, delete-orphan"
+    )
+
+    # --- Composite UNIQUE constraint (mirrors master_schemas.sql) ---
+    # Exposes (UserID, AccountID) as a composite key so Income/Expenses can
+    # declare a composite FK referencing this pair, enforcing DB-level
+    # cross-user account ownership.
+    __table_args__ = (
+        UniqueConstraint(
+            "UserID", "AccountID",
+            name="uq_bankaccount_user_account",
+        ),
     )
 
     def __repr__(self) -> str:
@@ -408,13 +422,27 @@ class Category(Base):
     # --- Relationships ---
     user: Mapped["User"] = relationship("User", back_populates="categories")
     budgets: Mapped[list["Budget"]] = relationship(
-        "Budget", back_populates="category", cascade="all, delete-orphan"
+        "Budget", back_populates="category", cascade="all, delete-orphan",
+        overlaps="budgets"
     )
     incomes: Mapped[list["Income"]] = relationship(
-        "Income", back_populates="category", cascade="all, delete-orphan"
+        "Income", back_populates="category", cascade="all, delete-orphan",
+        overlaps="incomes,incomes"
     )
     expenses: Mapped[list["Expense"]] = relationship(
-        "Expense", back_populates="category", cascade="all, delete-orphan"
+        "Expense", back_populates="category", cascade="all, delete-orphan",
+        overlaps="expenses,expenses"
+    )
+
+    # --- Composite UNIQUE constraint (mirrors master_schemas.sql) ---
+    # Exposes (UserID, CategoryID) as a composite key so Income/Expenses can
+    # declare a composite FK referencing this pair, enforcing DB-level
+    # cross-user category ownership.
+    __table_args__ = (
+        UniqueConstraint(
+            "UserID", "CategoryID",
+            name="uq_category_user_category",
+        ),
     )
 
     def __repr__(self) -> str:
@@ -454,8 +482,8 @@ class Budget(Base):
     )
     CategoryID: Mapped[int] = mapped_column(
         "CategoryID",
-        ForeignKey("Categories.CategoryID", ondelete="CASCADE"),
         nullable=False,
+        comment="Must match UserID in Categories (enforced by composite FK).",
     )
     LimitAmount: Mapped[Decimal] = mapped_column(
         "LimitAmount", Numeric(15, 2), nullable=False
@@ -475,14 +503,25 @@ class Budget(Base):
     )
 
     # --- Relationships ---
-    user: Mapped["User"] = relationship("User", back_populates="budgets")
+    user: Mapped["User"] = relationship(
+        "User", back_populates="budgets",
+        overlaps="budgets"
+    )
     category: Mapped["Category"] = relationship(
-        "Category", back_populates="budgets"
+        "Category", back_populates="budgets",
+        overlaps="budgets,user"
     )
 
-    # --- Performance Index (mirrors master_schemas.sql) ---
+    # --- Performance Index + Composite FK Ownership (mirrors master_schemas.sql) ---
     __table_args__ = (
         Index("idx_budgets_user_cat_period", "UserID", "CategoryID", "Period"),
+        # Composite FK: guarantees UserID owns CategoryID — rejects cross-user budget creation.
+        ForeignKeyConstraint(
+            ["UserID", "CategoryID"],
+            ["Categories.UserID", "Categories.CategoryID"],
+            ondelete="CASCADE",
+            name="fk_budget_user_category_composite",
+        ),
     )
 
     def __repr__(self) -> str:
@@ -570,13 +609,13 @@ class Income(Base):
     )
     AccountID: Mapped[int] = mapped_column(
         "AccountID",
-        ForeignKey("BankAccounts.AccountID", ondelete="CASCADE"),
         nullable=False,
+        comment="Must match UserID in BankAccounts (enforced by composite FK).",
     )
     CategoryID: Mapped[int] = mapped_column(
         "CategoryID",
-        ForeignKey("Categories.CategoryID", ondelete="CASCADE"),
         nullable=False,
+        comment="Must match UserID in Categories (enforced by composite FK).",
     )
     Amount: Mapped[Decimal] = mapped_column(
         "Amount",
@@ -603,18 +642,37 @@ class Income(Base):
     )
 
     # --- Relationships ---
-    user: Mapped["User"] = relationship("User", back_populates="incomes")
+    user: Mapped["User"] = relationship(
+        "User", back_populates="incomes",
+        overlaps="bank_account,category,incomes"
+    )
     bank_account: Mapped["BankAccount"] = relationship(
-        "BankAccount", back_populates="incomes"
+        "BankAccount", back_populates="incomes",
+        overlaps="category,incomes,user"
     )
     category: Mapped["Category"] = relationship(
-        "Category", back_populates="incomes"
+        "Category", back_populates="incomes",
+        overlaps="bank_account,incomes,user"
     )
 
-    # --- Performance Index + Amount Validation (mirrors master_schemas.sql) ---
+    # --- Performance Index + Amount Validation + Composite FK Ownership (mirrors master_schemas.sql) ---
     __table_args__ = (
         CheckConstraint("Amount > 0", name="chk_income_amount_positive"),
         Index("idx_income_user_date", "UserID", "TransactionDate"),
+        # Composite FK: guarantees UserID owns AccountID — rejects cross-user inserts.
+        ForeignKeyConstraint(
+            ["UserID", "AccountID"],
+            ["BankAccounts.UserID", "BankAccounts.AccountID"],
+            ondelete="CASCADE",
+            name="fk_income_user_account_composite",
+        ),
+        # Composite FK: guarantees UserID owns CategoryID — rejects cross-user inserts.
+        ForeignKeyConstraint(
+            ["UserID", "CategoryID"],
+            ["Categories.UserID", "Categories.CategoryID"],
+            ondelete="CASCADE",
+            name="fk_income_user_category_composite",
+        ),
     )
 
     def __repr__(self) -> str:
@@ -656,13 +714,13 @@ class Expense(Base):
     )
     AccountID: Mapped[int] = mapped_column(
         "AccountID",
-        ForeignKey("BankAccounts.AccountID", ondelete="CASCADE"),
         nullable=False,
+        comment="Must match UserID in BankAccounts (enforced by composite FK).",
     )
     CategoryID: Mapped[int] = mapped_column(
         "CategoryID",
-        ForeignKey("Categories.CategoryID", ondelete="CASCADE"),
         nullable=False,
+        comment="Must match UserID in Categories (enforced by composite FK).",
     )
     Amount: Mapped[Decimal] = mapped_column(
         "Amount",
@@ -689,18 +747,37 @@ class Expense(Base):
     )
 
     # --- Relationships ---
-    user: Mapped["User"] = relationship("User", back_populates="expenses")
+    user: Mapped["User"] = relationship(
+        "User", back_populates="expenses",
+        overlaps="bank_account,category,expenses"
+    )
     bank_account: Mapped["BankAccount"] = relationship(
-        "BankAccount", back_populates="expenses"
+        "BankAccount", back_populates="expenses",
+        overlaps="category,expenses,user"
     )
     category: Mapped["Category"] = relationship(
-        "Category", back_populates="expenses"
+        "Category", back_populates="expenses",
+        overlaps="bank_account,expenses,user"
     )
 
-    # --- Performance Index + Amount Validation (mirrors master_schemas.sql) ---
+    # --- Performance Index + Amount Validation + Composite FK Ownership (mirrors master_schemas.sql) ---
     __table_args__ = (
         CheckConstraint("Amount > 0", name="chk_expense_amount_positive"),
         Index("idx_expense_user_cat_date", "UserID", "CategoryID", "TransactionDate"),
+        # Composite FK: guarantees UserID owns AccountID — rejects cross-user inserts.
+        ForeignKeyConstraint(
+            ["UserID", "AccountID"],
+            ["BankAccounts.UserID", "BankAccounts.AccountID"],
+            ondelete="CASCADE",
+            name="fk_expense_user_account_composite",
+        ),
+        # Composite FK: guarantees UserID owns CategoryID — rejects cross-user inserts.
+        ForeignKeyConstraint(
+            ["UserID", "CategoryID"],
+            ["Categories.UserID", "Categories.CategoryID"],
+            ondelete="CASCADE",
+            name="fk_expense_user_category_composite",
+        ),
     )
 
     def __repr__(self) -> str:

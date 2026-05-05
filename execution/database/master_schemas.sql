@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS BankAccounts (
     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY idx_bankaccount_number (AccountNumber),
+    -- Composite key: exposes (UserID, AccountID) pair for composite FK references
+    -- from Income and Expenses to enforce strict per-user account ownership.
+    UNIQUE KEY uq_bankaccount_user_account (UserID, AccountID),
     FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS SystemCategories (
@@ -57,6 +60,9 @@ CREATE TABLE IF NOT EXISTS Categories (
     CategoryName VARCHAR(100) NOT NULL,
     Type ENUM('Income', 'Expense') NOT NULL,
     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Composite key: exposes (UserID, CategoryID) pair for composite FK references
+    -- from Income and Expenses to enforce strict per-user category ownership.
+    UNIQUE KEY uq_category_user_category (UserID, CategoryID),
     FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE
 );
 
@@ -68,8 +74,11 @@ CREATE TABLE IF NOT EXISTS Budgets (
     Period VARCHAR(7) NOT NULL, 
     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    -- Simple FK: guarantees the user exists.
     FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE,
-    FOREIGN KEY (CategoryID) REFERENCES Categories(CategoryID) ON DELETE CASCADE
+    -- Composite FK: guarantees UserID owns CategoryID — rejects cross-user budget creation.
+    FOREIGN KEY (UserID, CategoryID)
+        REFERENCES Categories(UserID, CategoryID) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS MarketWatch (
@@ -92,9 +101,14 @@ CREATE TABLE IF NOT EXISTS Income (
     ExternalTransID VARCHAR(255) NULL,
     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY idx_income_ext_trans_id (ExternalTransID),
+    -- Simple FK: guarantees the user exists.
     FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE,
-    FOREIGN KEY (AccountID) REFERENCES BankAccounts(AccountID) ON DELETE CASCADE,
-    FOREIGN KEY (CategoryID) REFERENCES Categories(CategoryID) ON DELETE CASCADE
+    -- Composite FK: guarantees UserID owns AccountID — rejects cross-user inserts.
+    FOREIGN KEY (UserID, AccountID)
+        REFERENCES BankAccounts(UserID, AccountID) ON DELETE CASCADE,
+    -- Composite FK: guarantees UserID owns CategoryID — rejects cross-user inserts.
+    FOREIGN KEY (UserID, CategoryID)
+        REFERENCES Categories(UserID, CategoryID) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS Expenses (
@@ -108,9 +122,14 @@ CREATE TABLE IF NOT EXISTS Expenses (
     ExternalTransID VARCHAR(255) NULL,
     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY idx_expense_ext_trans_id (ExternalTransID),
+    -- Simple FK: guarantees the user exists.
     FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE,
-    FOREIGN KEY (AccountID) REFERENCES BankAccounts(AccountID) ON DELETE CASCADE,
-    FOREIGN KEY (CategoryID) REFERENCES Categories(CategoryID) ON DELETE CASCADE
+    -- Composite FK: guarantees UserID owns AccountID — rejects cross-user inserts.
+    FOREIGN KEY (UserID, AccountID)
+        REFERENCES BankAccounts(UserID, AccountID) ON DELETE CASCADE,
+    -- Composite FK: guarantees UserID owns CategoryID — rejects cross-user inserts.
+    FOREIGN KEY (UserID, CategoryID)
+        REFERENCES Categories(UserID, CategoryID) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS SavingGoals (
