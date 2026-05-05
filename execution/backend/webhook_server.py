@@ -45,7 +45,8 @@ from sqlalchemy.orm import Session
 from bank_sync_service import process_webhook_payload
 from config import settings
 from database import SessionLocal
-from models import WebhookLog
+# WebhookLog import removed
+
 
 # =============================================================================
 # Application Setup
@@ -127,21 +128,6 @@ def receive_transaction() -> tuple[Response, int]:
         result: dict = process_webhook_payload(payload, db)
         http_code: int = result.get("code", 200)
 
-        # Log to DB (Dedicated block to prevent silent logging failures)
-        try:
-            log_entry = WebhookLog(
-                ExternalTransID=payload.get("bank_transaction_id"),
-                Status=result.get("status", "SUCCESS"),
-                StatusCode=http_code,
-                Detail=result.get("message") or result.get("detail")
-            )
-            db.add(log_entry)
-            db.commit()
-            logger.info("✅ WebhookLog persisted for TXN: %s", payload.get("bank_transaction_id"))
-        except Exception as log_err:
-            db.rollback()
-            logger.error("❌ Failed to persist WebhookLog: %s", log_err)
-
         # Build clean response — never include internal 'code' key in body
         response_body = {k: v for k, v in result.items() if k != "code"}
         return jsonify(response_body), http_code
@@ -152,31 +138,12 @@ def receive_transaction() -> tuple[Response, int]:
         status_str = "INSUFFICIENT_FUNDS" if "Insufficient funds" in msg else "INVALID_REQUEST"
         http_code = 422 if "Insufficient funds" in msg else 400
         
-        # Log failure
-        log = WebhookLog(
-            ExternalTransID=payload.get("bank_transaction_id"),
-            Status=status_str,
-            StatusCode=http_code,
-            Detail=msg
-        )
-        db.add(log)
-        db.commit()
-
         logger.warning("Webhook rejected (%s): %s", status_str, msg)
         return jsonify({"status": status_str, "detail": msg}), http_code
 
     except Exception as e:
         # --- Step 6: Outer safety net ---
         db.rollback()
-        log = WebhookLog(
-            ExternalTransID=payload.get("bank_transaction_id"),
-            Status="CRITICAL_ERROR",
-            StatusCode=500,
-            Detail=str(e)
-        )
-        db.add(log)
-        db.commit()
-        
         logger.error("Unhandled exception: %s", e)
         return jsonify({"error": "Internal Server Error", "detail": str(e)}), 500
 

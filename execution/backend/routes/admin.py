@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, session, request
 from database import SessionLocal
 from routes.utils import admin_required, login_required
-from models import User, UserRole, AdminLog, WebhookLog, Income, Expense, Category
+from models import User, UserRole, AdminLog, Income, Expense, Category
 from sqlalchemy import select, func, text
 from datetime import datetime
 from decimal import Decimal

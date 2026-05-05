@@ -24,14 +24,8 @@ CREATE TABLE IF NOT EXISTS AdminLogs (
     FOREIGN KEY (TargetUserID) REFERENCES Users(UserID) ON DELETE SET NULL
 );
 
-CREATE TABLE IF NOT EXISTS WebhookLogs (
-    LogID INT AUTO_INCREMENT PRIMARY KEY,
-    ExternalTransID VARCHAR(255),
-    Status VARCHAR(50) NOT NULL, -- e.g. 'SUCCESS', 'DUPLICATE', 'INSUFFICIENT_FUNDS', 'ERROR'
-    StatusCode INT NOT NULL,
-    Detail TEXT,
-    Timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- WebhookLogs table removed as per user request.
+
 
 CREATE TABLE IF NOT EXISTS BankAccounts (
     AccountID INT AUTO_INCREMENT PRIMARY KEY,

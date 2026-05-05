@@ -232,20 +232,7 @@ class AdminLog(Base):
     admin: Mapped["User"] = relationship("User", foreign_keys=[AdminID], back_populates="admin_logs")
     target_user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[TargetUserID])
 
-# Model: WebhookLog
-class WebhookLog(Base):
-    """
-    ORM model for the `WebhookLogs` table.
-    Tracks incoming webhook traffic for system health monitoring.
-    """
-    __tablename__ = "WebhookLogs"
-
-    LogID: Mapped[int] = mapped_column("LogID", primary_key=True, autoincrement=True)
-    ExternalTransID: Mapped[Optional[str]] = mapped_column("ExternalTransID", String(255), nullable=True)
-    Status: Mapped[str] = mapped_column("Status", String(50), nullable=False)
-    StatusCode: Mapped[int] = mapped_column("StatusCode", Integer, nullable=False)
-    Detail: Mapped[Optional[str]] = mapped_column("Detail", Text, nullable=True)
-    Timestamp: Mapped[datetime] = mapped_column("Timestamp", DateTime, nullable=False, server_default=func.now())
+# WebhookLog model removed as per user request.
 
 
 # =============================================================================

@@ -49,7 +49,6 @@ from models import (
     User,
     UserRole,
     AdminLog,
-    WebhookLog,
 )
 
 # =============================================================================
@@ -222,7 +221,7 @@ def clear_data(db: Session) -> None:
     db.execute(text("SET FOREIGN_KEY_CHECKS = 0;"))
     
     tables = [
-        "AdminLogs", "WebhookLogs", "MonthlyClosures", "Income", 
+        "AdminLogs", "MonthlyClosures", "Income", 
         "Expenses", "Budgets", "MarketWatch", "BankAccounts", 
         "Categories", "Users"
     ]
@@ -636,39 +635,10 @@ def seed_admin_logs(db: Session, users: list[User]):
         ))
     db.commit()
 
-def seed_webhook_logs(db: Session):
-    """Seeds a larger set of webhook traffic for health metrics."""
-    print("  Seeding webhook logs...")
-    
-    # Successes (200)
-    for i in range(40):
-        db.add(WebhookLog(
-            ExternalTransID=f"TXN-SUCCESS-{faker.uuid4()[:8]}",
-            Status="SUCCESS",
-            StatusCode=200,
-            Detail="Transaction processed successfully",
-            Timestamp=datetime.now() - timedelta(minutes=random.randint(5, 5000))
-        ))
-        
-    # Errors (400, 422, 500)
-    error_types = [
-        ("INSUFFICIENT_FUNDS", 422, "Target account balance would fall below zero"),
-        ("INVALID_ACCOUNT", 400, "Account number not found"),
-        ("GATEWAY_TIMEOUT", 504, "Upstream bank did not respond"),
-        ("UNAUTHORIZED", 401, "Invalid API key provided"),
-        ("DUPLICATE", 200, "Duplicate transaction ID blocked by idempotency guard")
-    ]
-    
-    for _ in range(15):
-        status, code, detail = random.choice(error_types)
-        db.add(WebhookLog(
-            ExternalTransID=f"TXN-FAIL-{faker.uuid4()[:8]}",
-            Status=status,
-            StatusCode=code,
-            Detail=detail,
-            Timestamp=datetime.now() - timedelta(minutes=random.randint(5, 5000))
-        ))
     db.commit()
+
+# Webhook log seeding removed
+
 
 # =============================================================================
 # Step 3.10 — Main Orchestrator
@@ -705,9 +675,8 @@ def run_seed() -> None:
         income_count: int = seed_income(db, users, accounts)
         expense_count: int = seed_expenses(db, users, accounts)
         
-        # New: Seed Admin & Webhook Logs
+        # New: Seed Admin Logs
         seed_admin_logs(db, users)
-        seed_webhook_logs(db)
 
         # =====================================================================
         # Step 3.10 — Final Summary Report
