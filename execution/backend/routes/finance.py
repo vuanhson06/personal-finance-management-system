@@ -31,16 +31,11 @@ def get_accounts():
 @finance_bp.route("/accounts/<int:id>", methods=["GET"])
 @login_required
 def get_account_detail(id):
-    """
-    Fetches details for a single account.
-    Enforces QA-ISO-01: Returns 404 if the account belongs to another user.
-    """
     db = SessionLocal()
     try:
         from models import BankAccount
         from sqlalchemy import select
         
-        # Strict isolation: check both AccountID and UserID
         stmt = select(BankAccount).where(
             BankAccount.AccountID == id,
             BankAccount.UserID == session["user_id"]
@@ -48,7 +43,6 @@ def get_account_detail(id):
         account = db.execute(stmt).scalars().first()
         
         if not account:
-            # We return 404 even if it exists for another user to prevent ID enumeration
             return jsonify({"status": "error", "message": "Account not found.", "data": None}), 404
             
         return jsonify({
@@ -99,7 +93,6 @@ def get_categories():
         from models import Category, SystemCategory
         from sqlalchemy import select
         
-        # Fetch system categories to identify clones
         sys_cats = db.execute(select(SystemCategory.CategoryName)).scalars().all()
         sys_names = set(name.lower() for name in sys_cats)
         
@@ -372,11 +365,6 @@ def monthly_closure():
 @finance_bp.route("/sync/records", methods=["GET"])
 @login_required
 def get_sync_records():
-    """
-    Returns all transactions (income + expense) that originated from an external
-    bank sync (i.e., ExternalTransID IS NOT NULL), ordered by date descending.
-    This powers the Bank Sync Record ledger on the Sync tab.
-    """
     db = SessionLocal()
     try:
         from models import Income, Expense, Category
@@ -384,7 +372,6 @@ def get_sync_records():
 
         uid = session["user_id"]
 
-        # --- Income synced records ---
         inc_q = (
             select(
                 Income.TransactionID,
@@ -400,7 +387,6 @@ def get_sync_records():
         )
         inc_rows = db.execute(inc_q).mappings().all()
 
-        # --- Expense synced records ---
         exp_q = (
             select(
                 Expense.TransactionID,

@@ -4,7 +4,7 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-    
+
     const tickerContainer = document.getElementById('marketTickerContainer');
 
     const fetchMarketData = async () => {
@@ -14,12 +14,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (response.ok && result.data && result.data.length > 0) {
                 tickerContainer.innerHTML = ''; // Clear loading state
-                
+
                 result.data.forEach(asset => {
                     // Extract data from the market_service format
                     // Assuming structure contains price, symbol, and optionally previous close or change
                     // Since yfinance fast_info returns last_price, we will format it beautifully.
-                    
+
                     const priceStr = new Intl.NumberFormat('en-US', {
                         style: 'currency',
                         currency: asset.currency || 'USD'
@@ -27,14 +27,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // Mock percentage change for visual effect if not provided by backend
                     // Real implementation would calculate this if market_service returns previous_close
-                    const mockChange = (Math.random() * 5 - 2.5).toFixed(2); 
+                    const mockChange = (Math.random() * 5 - 2.5).toFixed(2);
                     const isPositive = mockChange >= 0;
                     const changeColor = isPositive ? 'var(--neu-success)' : 'var(--neu-danger)';
                     const changeArrow = isPositive ? '▲' : '▼';
 
                     const card = document.createElement('div');
                     card.className = 'neu-outset ticker-card position-relative d-flex flex-column align-items-center justify-content-center';
-                    
+
                     card.innerHTML = `
                         <button class="ticker-delete-btn" 
                                 onclick="deleteMarketWatch(${asset.watch_id})" 
@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             ${changeArrow} ${Math.abs(mockChange)}%
                         </small>
                     `;
-                    
+
                     tickerContainer.appendChild(card);
                 });
             } else {
@@ -60,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Delete Market Watch
     window.deleteMarketWatch = async (watchId) => {
         if (!confirm('Remove this asset from your watchlist?')) return;
-        
+
         try {
             const res = await fetch(`/api/reports/market/watchlist/${watchId}`, { method: 'DELETE' });
             if (res.ok) {
@@ -80,21 +80,21 @@ document.addEventListener('DOMContentLoaded', () => {
         addForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const data = Object.fromEntries(new FormData(e.target).entries());
-            
+
             try {
                 const res = await fetch('/api/reports/market/watchlist', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
                 const result = await res.json();
-                
+
                 if (res.ok) {
                     // Hide modal
                     const modalEl = document.getElementById('addMarketModal');
                     const modal = bootstrap.Modal.getInstance(modalEl);
                     if (modal) modal.hide();
-                    
+
                     e.target.reset();
                     fetchMarketData();
                 } else {
@@ -117,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initial fetch
     fetchMarketData();
-    
+
     // Optional: Refresh every 60 seconds
     setInterval(fetchMarketData, 60000);
 });

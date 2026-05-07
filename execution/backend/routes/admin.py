@@ -8,7 +8,6 @@ from decimal import Decimal
 
 admin_bp = Blueprint("admin", __name__)
 
-# --- Helper: Log Admin Action ---
 def log_admin_action(action, target_user_id=None):
     db = SessionLocal()
     try:
@@ -23,10 +22,6 @@ def log_admin_action(action, target_user_id=None):
         print(f"Failed to log admin action: {e}")
     finally:
         db.close()
-
-# =============================================================================
-# User Management
-# =============================================================================
 
 @admin_bp.route("/users", methods=["GET"])
 @admin_required
@@ -71,16 +66,12 @@ def toggle_user_status(user_id):
     finally:
         db.close()
 
-# =============================================================================
-# System Health (Webhook Monitor)
-# =============================================================================
 
 @admin_bp.route("/system-health", methods=["GET"])
 @admin_required
 def get_system_health():
     db = SessionLocal()
     try:
-        # Total registered users count
         from models import User
         total_users = db.execute(select(func.count(User.UserID))).scalar()
         
@@ -95,17 +86,12 @@ def get_system_health():
     finally:
         db.close()
 
-# =============================================================================
-# Global Analytics
-# =============================================================================
 
 @admin_bp.route("/analytics/global", methods=["GET"])
 @admin_required
 def get_global_analytics():
     db = SessionLocal()
     try:
-        # 1. Global Spending Distribution (Platform Volume by Category)
-        # We'll aggregate Expenses across all users
         dist_query = text("""
             SELECT c.CategoryName, SUM(e.Amount) as TotalAmount
             FROM Expenses e
@@ -116,10 +102,6 @@ def get_global_analytics():
         dist_results = db.execute(dist_query).mappings().all()
         distribution = [{"category": r["CategoryName"], "amount": str(r["TotalAmount"])} for r in dist_results]
         
-        # 2. Activity Heatmap (Transactions per Hour)
-        # --- Heatmap Aggregation (Activity Density) ---
-        # Returns [ {day: 1..7, hour: 0..23, count: X}, ... ]
-        # Note: DAYOFWEEK returns 1 (Sun) to 7 (Sat) in MySQL.
         heatmap_query = text("""
             SELECT DAYOFWEEK(CreatedAt) as Day, HOUR(CreatedAt) as Hour, COUNT(*) as Count
             FROM (
@@ -146,9 +128,6 @@ def get_global_analytics():
     finally:
         db.close()
 
-# =============================================================================
-# Audit Trail
-# =============================================================================
 
 @admin_bp.route("/logs", methods=["GET"])
 @admin_required

@@ -24,8 +24,6 @@ CREATE TABLE IF NOT EXISTS AdminLogs (
     FOREIGN KEY (TargetUserID) REFERENCES Users(UserID) ON DELETE SET NULL
 );
 
--- WebhookLogs table removed as per user request.
-
 
 CREATE TABLE IF NOT EXISTS BankAccounts (
     AccountID INT AUTO_INCREMENT PRIMARY KEY,
@@ -36,11 +34,10 @@ CREATE TABLE IF NOT EXISTS BankAccounts (
     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY idx_bankaccount_number (AccountNumber),
-    -- Composite key: exposes (UserID, AccountID) pair for composite FK references
-    -- from Income and Expenses to enforce strict per-user account ownership.
     UNIQUE KEY uq_bankaccount_user_account (UserID, AccountID),
     FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE
 );
+
 CREATE TABLE IF NOT EXISTS SystemCategories (
     SystemCatID INT AUTO_INCREMENT PRIMARY KEY,
     CategoryName VARCHAR(100) NOT NULL,
@@ -54,8 +51,6 @@ CREATE TABLE IF NOT EXISTS Categories (
     CategoryName VARCHAR(100) NOT NULL,
     Type ENUM('Income', 'Expense') NOT NULL,
     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    -- Composite key: exposes (UserID, CategoryID) pair for composite FK references
-    -- from Income and Expenses to enforce strict per-user category ownership.
     UNIQUE KEY uq_category_user_category (UserID, CategoryID),
     FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE
 );
@@ -68,11 +63,8 @@ CREATE TABLE IF NOT EXISTS Budgets (
     Period VARCHAR(7) NOT NULL, 
     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    -- Simple FK: guarantees the user exists.
     FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE,
-    -- Composite FK: guarantees UserID owns CategoryID — rejects cross-user budget creation.
-    FOREIGN KEY (UserID, CategoryID)
-        REFERENCES Categories(UserID, CategoryID) ON DELETE CASCADE
+    FOREIGN KEY (UserID, CategoryID) REFERENCES Categories(UserID, CategoryID) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS MarketWatch (
@@ -95,14 +87,9 @@ CREATE TABLE IF NOT EXISTS Income (
     ExternalTransID VARCHAR(255) NULL,
     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY idx_income_ext_trans_id (ExternalTransID),
-    -- Simple FK: guarantees the user exists.
     FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE,
-    -- Composite FK: guarantees UserID owns AccountID — rejects cross-user inserts.
-    FOREIGN KEY (UserID, AccountID)
-        REFERENCES BankAccounts(UserID, AccountID) ON DELETE CASCADE,
-    -- Composite FK: guarantees UserID owns CategoryID — rejects cross-user inserts.
-    FOREIGN KEY (UserID, CategoryID)
-        REFERENCES Categories(UserID, CategoryID) ON DELETE CASCADE
+    FOREIGN KEY (UserID, AccountID) REFERENCES BankAccounts(UserID, AccountID) ON DELETE CASCADE,
+    FOREIGN KEY (UserID, CategoryID) REFERENCES Categories(UserID, CategoryID) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS Expenses (
@@ -116,30 +103,33 @@ CREATE TABLE IF NOT EXISTS Expenses (
     ExternalTransID VARCHAR(255) NULL,
     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY idx_expense_ext_trans_id (ExternalTransID),
-    -- Simple FK: guarantees the user exists.
     FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE,
-    -- Composite FK: guarantees UserID owns AccountID — rejects cross-user inserts.
-    FOREIGN KEY (UserID, AccountID)
-        REFERENCES BankAccounts(UserID, AccountID) ON DELETE CASCADE,
-    -- Composite FK: guarantees UserID owns CategoryID — rejects cross-user inserts.
-    FOREIGN KEY (UserID, CategoryID)
-        REFERENCES Categories(UserID, CategoryID) ON DELETE CASCADE
+    FOREIGN KEY (UserID, AccountID) REFERENCES BankAccounts(UserID, AccountID) ON DELETE CASCADE,
+    FOREIGN KEY (UserID, CategoryID) REFERENCES Categories(UserID, CategoryID) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS SavingGoals (
-    GoalID        INT AUTO_INCREMENT PRIMARY KEY,
-    UserID        INT NOT NULL,
-    GoalName      VARCHAR(255) NOT NULL,
-    TargetAmount  DECIMAL(15,2) NOT NULL CHECK (TargetAmount > 0),
+    GoalID INT AUTO_INCREMENT PRIMARY KEY,
+    UserID INT NOT NULL,
+    GoalName VARCHAR(255) NOT NULL,
+    TargetAmount DECIMAL(15,2) NOT NULL CHECK (TargetAmount > 0),
     CurrentAmount DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-    Deadline      DATE NULL,
-    Status        ENUM('Active', 'Completed') NOT NULL DEFAULT 'Active',
-    CreatedAt     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UpdatedAt     TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    Deadline DATE NULL,
+    Status ENUM('Active', 'Completed') NOT NULL DEFAULT 'Active',
+    CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_savinggoals_user ON SavingGoals (UserID, Status);
+CREATE TABLE IF NOT EXISTS MonthlyClosures (
+    ClosureID INT AUTO_INCREMENT PRIMARY KEY,
+    AccountID INT NOT NULL,
+    ClosurePeriod VARCHAR(7) NOT NULL, 
+    ClosingBalance DECIMAL(15,2) NOT NULL,
+    CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (AccountID) REFERENCES BankAccounts(AccountID) ON DELETE CASCADE,
+    UNIQUE KEY unique_account_period (AccountID, ClosurePeriod) 
+);
 
 INSERT INTO SystemCategories (CategoryName, Type) VALUES
 ('Salary', 'Income'),
@@ -299,15 +289,6 @@ BEGIN
 END$$
 DELIMITER ;
 
-CREATE TABLE IF NOT EXISTS MonthlyClosures (
-    ClosureID INT AUTO_INCREMENT PRIMARY KEY,
-    AccountID INT NOT NULL,
-    ClosurePeriod VARCHAR(7) NOT NULL, 
-    ClosingBalance DECIMAL(15,2) NOT NULL,
-    CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (AccountID) REFERENCES BankAccounts(AccountID) ON DELETE CASCADE,
-    UNIQUE KEY unique_account_period (AccountID, ClosurePeriod) 
-);
 
 DELIMITER $$
 CREATE PROCEDURE CalculateMonthlyClosure(IN p_UserID INT, IN p_Period VARCHAR(7))
@@ -405,3 +386,5 @@ CREATE INDEX  idx_income_user_date ON Income (UserID, TransactionDate);
 CREATE INDEX  idx_expense_user_cat_date ON Expenses (UserID, CategoryID, TransactionDate);
 
 CREATE INDEX  idx_budgets_user_cat_period ON Budgets (UserID, CategoryID, Period);
+
+CREATE INDEX idx_savinggoals_user ON SavingGoals (UserID, Status);

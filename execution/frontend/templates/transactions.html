@@ -49,6 +49,19 @@
         justify-content: space-between;
         align-items: center;
     }
+    .txn-action-btn {
+        background: none;
+        border: none;
+        padding: 4px 8px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.8rem;
+        transition: all 0.2s;
+        opacity: 0.6;
+    }
+    .txn-action-btn:hover { opacity: 1; transform: scale(1.1); }
+    .txn-action-btn.edit-btn { color: var(--neu-primary); }
+    .txn-action-btn.delete-btn { color: var(--neu-danger); }
 </style>
 {% endblock %}
 
@@ -157,6 +170,45 @@
                         <button type="submit" class="neu-btn-primary w-100">Submit Transaction</button>
                     </form>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Transaction Modal -->
+<div class="modal fade" id="editTransactionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content neu-outset" style="background: var(--neu-surface);">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold" style="color: var(--neu-primary);">Edit Transaction</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editTransactionForm">
+                    <input type="hidden" id="editTxnId">
+                    <input type="hidden" id="editTxnType">
+                    <div class="mb-3">
+                        <label class="form-label text-muted ms-2">Account</label>
+                        <select class="form-control neu-inset w-100" id="editAccountSelect"></select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted ms-2">Category</label>
+                        <select class="form-control neu-inset w-100" id="editCategorySelect"></select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted ms-2">Amount</label>
+                        <input type="number" step="0.01" class="form-control neu-inset w-100" id="editAmount" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted ms-2">Date</label>
+                        <input type="date" class="form-control neu-inset w-100" id="editDate" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label text-muted ms-2">Description</label>
+                        <input type="text" class="form-control neu-inset w-100" id="editDescription">
+                    </div>
+                    <button type="submit" class="neu-btn-primary w-100">Save Changes</button>
+                </form>
             </div>
         </div>
     </div>

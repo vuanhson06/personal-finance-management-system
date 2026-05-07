@@ -1,21 +1,3 @@
-"""
-models.py — SQLAlchemy ORM Data Models
-=======================================
-Defines all Python ORM classes that perfectly mirror the 9 tables in
-`execution/database/master_schemas.sql`. Each model inherits from `Base`
-(defined in `database.py`) and uses SQLAlchemy 2.0+ Mapped/mapped_column
-syntax for full type-hint support.
-
-Security Notes:
-    - The `User` model integrates `bcrypt` directly for password hashing.
-    - Plain-text passwords are NEVER stored or passed to the DB layer.
-    - Role-based access is enforced via the `is_admin()` helper method.
-
-Directive Reference:
-    - directives/backend_logic_rules.md — Section 1 (ORM Modeling), Section 3 (RBAC)
-    - directives/db_rules.md — Section 4 (Security Protocols)
-"""
-
 import enum
 from datetime import date, datetime
 from decimal import Decimal
@@ -44,66 +26,22 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 
 
-# =============================================================================
-# Enumerations
-# =============================================================================
-
 class UserRole(enum.Enum):
-    """
-    Defines the two valid roles a user can hold in the system.
-    Maps directly to the MySQL ENUM('Admin', 'User') on the Users table.
-
-    Admin : Has elevated privileges, including management of SystemCategories.
-    User  : Standard access — can only interact with their own data.
-    """
     Admin = "Admin"
     User = "User"
 
 
 class TransactionType(enum.Enum):
-    """
-    Defines the two valid category/transaction types.
-    Maps to ENUM('Income', 'Expense') used in SystemCategories and Categories.
-    """
     Income = "Income"
     Expense = "Expense"
 
 
 class GoalStatus(enum.Enum):
-    """
-    Defines the two valid lifecycle states for a SavingGoal.
-    Maps to ENUM('Active', 'Completed') on the SavingGoals table.
-
-    Active    : Goal is in progress — contributions are accepted.
-    Completed : CurrentAmount has reached or exceeded TargetAmount.
-                Contributions are blocked until the goal is reset.
-    """
     Active = "Active"
     Completed = "Completed"
 
 
-# =============================================================================
-# Model 1: User
-# =============================================================================
-
 class User(Base):
-    """
-    ORM model for the `Users` table.
-
-    Represents an authenticated account in the Personal Finance system.
-    Each user owns their own BankAccounts, Categories, Budgets, and transactions.
-    Passwords are NEVER stored in plain text — use `set_password()` on registration
-    and `verify_password()` on login.
-
-    Relationships:
-        bank_accounts  → List[BankAccount]
-        categories     → List[Category]
-        budgets        → List[Budget]
-        market_watches → List[MarketWatch]
-        incomes        → List[Income]
-        expenses       → List[Expense]
-    """
-
     __tablename__ = "Users"
 
     UserID: Mapped[int] = mapped_column(
@@ -142,7 +80,6 @@ class User(Base):
         onupdate=func.now(),
     )
 
-    # --- Relationships (back-populated from child tables) ---
     bank_accounts: Mapped[list["BankAccount"]] = relationship(
         "BankAccount", back_populates="user", cascade="all, delete-orphan"
     )
@@ -168,59 +105,26 @@ class User(Base):
         "SavingGoal", back_populates="user", cascade="all, delete-orphan"
     )
   
-    # --- Security Methods ---
 
     def set_password(self, plain_text: str) -> None:
-        """
-        Hashes a plain-text password using bcrypt and stores the result
-        in `self.PasswordHash`. This is the ONLY sanctioned way to set
-        a user's password. Never call this with an already-hashed value.
-
-        Args:
-            plain_text: The raw password string provided by the user during
-                        registration or a password-change operation.
-        """
         salt: bytes = bcrypt.gensalt()
         self.PasswordHash = bcrypt.hashpw(
             plain_text.encode("utf-8"), salt
         ).decode("utf-8")
 
     def verify_password(self, plain_text: str) -> bool:
-        """
-        Verifies a plain-text login attempt against the stored bcrypt hash.
-        Returns True only if the password is correct. Uses constant-time
-        comparison to prevent timing attacks.
-
-        Args:
-            plain_text: The raw password string provided by the user at login.
-
-        Returns:
-            True if the password matches the stored hash, False otherwise.
-        """
         return bcrypt.checkpw(
             plain_text.encode("utf-8"),
             self.PasswordHash.encode("utf-8"),
         )
 
     def is_admin(self) -> bool:
-        """
-        Checks if this user holds the 'Admin' role.
-        Use this guard before permitting any SystemCategories mutation.
-
-        Returns:
-            True if the user's role is UserRole.Admin, False otherwise.
-        """
         return self.Role == UserRole.Admin
 
     def __repr__(self) -> str:
         return f"<User id={self.UserID} email='{self.Email}' role={self.Role.value}>"
 
-# Model: AdminLog
 class AdminLog(Base):
-    """
-    ORM model for the `AdminLogs` table.
-    Captures all administrative actions for auditing purposes.
-    """
     __tablename__ = "AdminLogs"
 
     LogID: Mapped[int] = mapped_column("LogID", primary_key=True, autoincrement=True)
@@ -232,28 +136,8 @@ class AdminLog(Base):
     admin: Mapped["User"] = relationship("User", foreign_keys=[AdminID], back_populates="admin_logs")
     target_user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[TargetUserID])
 
-# WebhookLog model removed as per user request.
-
-
-# =============================================================================
-# Model 2: BankAccount
-# =============================================================================
 
 class BankAccount(Base):
-    """
-    ORM model for the `BankAccounts` table.
-
-    Represents a financial account belonging to a User. The `Balance` field
-    is managed exclusively by SQL triggers on the Income and Expenses tables
-    and must NEVER be updated directly from the Python application layer.
-
-    Relationships:
-        user     → User (many-to-one)
-        incomes  → List[Income]
-        expenses → List[Expense]
-        monthly_closures → List[MonthlyClosure]
-    """
-
     __tablename__ = "BankAccounts"
 
     AccountID: Mapped[int] = mapped_column(
@@ -287,7 +171,6 @@ class BankAccount(Base):
         onupdate=func.now(),
     )
 
-    # --- Relationships ---
     user: Mapped["User"] = relationship("User", back_populates="bank_accounts")
     incomes: Mapped[list["Income"]] = relationship(
         "Income", back_populates="bank_account", cascade="all, delete-orphan",
@@ -301,10 +184,6 @@ class BankAccount(Base):
         "MonthlyClosure", back_populates="bank_account", cascade="all, delete-orphan"
     )
 
-    # --- Composite UNIQUE constraint (mirrors master_schemas.sql) ---
-    # Exposes (UserID, AccountID) as a composite key so Income/Expenses can
-    # declare a composite FK referencing this pair, enforcing DB-level
-    # cross-user account ownership.
     __table_args__ = (
         UniqueConstraint(
             "UserID", "AccountID",
@@ -319,26 +198,7 @@ class BankAccount(Base):
             f"name='{self.AccountName}' balance={self.Balance}>"
         )
 
-
-# =============================================================================
-# Model 3: SystemCategory
-# =============================================================================
-
 class SystemCategory(Base):
-    """
-    ORM model for the `SystemCategories` table.
-
-    This is a GLOBAL system-level table with NO UserID. It serves as the
-    master template from which new user categories are cloned automatically
-    by the `After_User_Insert` SQL trigger.
-
-    CRITICAL: Only Admin users are permitted to INSERT, UPDATE, or DELETE
-    records in this table. Enforce the `user.is_admin()` check in all
-    service-layer code that mutates this model.
-
-    Relationships: None — this is a standalone template table.
-    """
-
     __tablename__ = "SystemCategories"
 
     SystemCatID: Mapped[int] = mapped_column(
@@ -362,30 +222,7 @@ class SystemCategory(Base):
             f"name='{self.CategoryName}' type={self.Type.value}>"
         )
 
-
-# =============================================================================
-# Model 4: Category
-# =============================================================================
-
 class Category(Base):
-    """
-    ORM model for the `Categories` table.
-
-    Represents a privately-owned category tag for a specific User. Every
-    user's categories are automatically seeded from `SystemCategories` when
-    their account is created (via the `After_User_Insert` SQL trigger).
-    Users may then freely add, rename, or delete their own categories without
-    affecting the system defaults or other users.
-
-    Business Rule: `UserID` is NOT NULL — a category must always have an owner.
-
-    Relationships:
-        user     → User (many-to-one)
-        budgets  → List[Budget]
-        incomes  → List[Income]
-        expenses → List[Expense]
-    """
-
     __tablename__ = "Categories"
 
     CategoryID: Mapped[int] = mapped_column(
@@ -406,7 +243,6 @@ class Category(Base):
         "CreatedAt", DateTime, nullable=False, server_default=func.now()
     )
 
-    # --- Relationships ---
     user: Mapped["User"] = relationship("User", back_populates="categories")
     budgets: Mapped[list["Budget"]] = relationship(
         "Budget", back_populates="category", cascade="all, delete-orphan",
@@ -421,10 +257,6 @@ class Category(Base):
         overlaps="expenses,expenses"
     )
 
-    # --- Composite UNIQUE constraint (mirrors master_schemas.sql) ---
-    # Exposes (UserID, CategoryID) as a composite key so Income/Expenses can
-    # declare a composite FK referencing this pair, enforcing DB-level
-    # cross-user category ownership.
     __table_args__ = (
         UniqueConstraint(
             "UserID", "CategoryID",
@@ -438,27 +270,7 @@ class Category(Base):
             f"name='{self.CategoryName}' user_id={self.UserID}>"
         )
 
-
-# =============================================================================
-# Model 5: Budget
-# =============================================================================
-
 class Budget(Base):
-    """
-    ORM model for the `Budgets` table.
-
-    Defines a spending cap for a specific Category within a given period
-    for a specific User. The `GetBudgetStatus` SQL UDF is used to compute
-    the remaining allowance dynamically at the database level.
-
-    Period format: 'YYYY-MM' (e.g., '2026-04') — aligns with the MySQL
-    DATE_FORMAT pattern used in analytics views.
-
-    Relationships:
-        user     → User (many-to-one)
-        category → Category (many-to-one)
-    """
-
     __tablename__ = "Budgets"
 
     BudgetID: Mapped[int] = mapped_column(
@@ -489,7 +301,6 @@ class Budget(Base):
         onupdate=func.now(),
     )
 
-    # --- Relationships ---
     user: Mapped["User"] = relationship(
         "User", back_populates="budgets",
         overlaps="budgets"
@@ -499,10 +310,8 @@ class Budget(Base):
         overlaps="budgets,user"
     )
 
-    # --- Performance Index + Composite FK Ownership (mirrors master_schemas.sql) ---
     __table_args__ = (
         Index("idx_budgets_user_cat_period", "UserID", "CategoryID", "Period"),
-        # Composite FK: guarantees UserID owns CategoryID — rejects cross-user budget creation.
         ForeignKeyConstraint(
             ["UserID", "CategoryID"],
             ["Categories.UserID", "Categories.CategoryID"],
@@ -518,24 +327,7 @@ class Budget(Base):
             f"limit={self.LimitAmount}>"
         )
 
-
-# =============================================================================
-# Model 6: MarketWatch
-# =============================================================================
-
 class MarketWatch(Base):
-    """
-    ORM model for the `MarketWatch` table.
-
-    Represents a financial asset (Stock, Crypto, Gold, etc.) that a User
-    is monitoring. Live price data is fetched from the `yfinance` service
-    in the backend and is NOT stored here — this table only tracks the
-    user's watchlist of asset symbols.
-
-    Relationships:
-        user → User (many-to-one)
-    """
-
     __tablename__ = "MarketWatch"
 
     WatchID: Mapped[int] = mapped_column(
@@ -554,7 +346,6 @@ class MarketWatch(Base):
         "CreatedAt", DateTime, nullable=False, server_default=func.now()
     )
 
-    # --- Relationships ---
     user: Mapped["User"] = relationship("User", back_populates="market_watches")
 
     def __repr__(self) -> str:
@@ -563,29 +354,7 @@ class MarketWatch(Base):
             f"symbol='{self.AssetSymbol}' type='{self.AssetType}'>"
         )
 
-
-# =============================================================================
-# Model 7: Income
-# =============================================================================
-
 class Income(Base):
-    """
-    ORM model for the `Income` table.
-
-    Records a single income-type financial transaction for a User.
-    The `Amount` must be strictly greater than 0 — enforced at both the
-    SQL layer (CHECK constraint) and the Python service layer before insertion.
-
-    IMPORTANT: Do NOT manually update `BankAccounts.Balance` after inserting
-    an Income record. The `After_Income_Insert` SQL trigger handles this
-    automatically and atomically.
-
-    Relationships:
-        user         → User (many-to-one)
-        bank_account → BankAccount (many-to-one)
-        category     → Category (many-to-one)
-    """
-
     __tablename__ = "Income"
 
     TransactionID: Mapped[int] = mapped_column(
@@ -628,7 +397,6 @@ class Income(Base):
         "CreatedAt", DateTime, nullable=False, server_default=func.now()
     )
 
-    # --- Relationships ---
     user: Mapped["User"] = relationship(
         "User", back_populates="incomes",
         overlaps="bank_account,category,incomes"
@@ -642,18 +410,15 @@ class Income(Base):
         overlaps="bank_account,incomes,user"
     )
 
-    # --- Performance Index + Amount Validation + Composite FK Ownership (mirrors master_schemas.sql) ---
     __table_args__ = (
         CheckConstraint("Amount > 0", name="chk_income_amount_positive"),
         Index("idx_income_user_date", "UserID", "TransactionDate"),
-        # Composite FK: guarantees UserID owns AccountID — rejects cross-user inserts.
         ForeignKeyConstraint(
             ["UserID", "AccountID"],
             ["BankAccounts.UserID", "BankAccounts.AccountID"],
             ondelete="CASCADE",
             name="fk_income_user_account_composite",
         ),
-        # Composite FK: guarantees UserID owns CategoryID — rejects cross-user inserts.
         ForeignKeyConstraint(
             ["UserID", "CategoryID"],
             ["Categories.UserID", "Categories.CategoryID"],
@@ -668,29 +433,7 @@ class Income(Base):
             f"amount={self.Amount} date={self.TransactionDate}>"
         )
 
-
-# =============================================================================
-# Model 8: Expense
-# =============================================================================
-
 class Expense(Base):
-    """
-    ORM model for the `Expenses` table.
-
-    Records a single expense-type financial transaction for a User.
-    The `Amount` must be strictly greater than 0 — enforced at both the
-    SQL layer (CHECK constraint) and the Python service layer before insertion.
-
-    IMPORTANT: Do NOT manually update `BankAccounts.Balance` after inserting
-    an Expense record. The `After_Expense_Insert` SQL trigger handles this
-    automatically and atomically.
-
-    Relationships:
-        user         → User (many-to-one)
-        bank_account → BankAccount (many-to-one)
-        category     → Category (many-to-one)
-    """
-
     __tablename__ = "Expenses"
 
     TransactionID: Mapped[int] = mapped_column(
@@ -733,7 +476,6 @@ class Expense(Base):
         "CreatedAt", DateTime, nullable=False, server_default=func.now()
     )
 
-    # --- Relationships ---
     user: Mapped["User"] = relationship(
         "User", back_populates="expenses",
         overlaps="bank_account,category,expenses"
@@ -747,18 +489,15 @@ class Expense(Base):
         overlaps="bank_account,expenses,user"
     )
 
-    # --- Performance Index + Amount Validation + Composite FK Ownership (mirrors master_schemas.sql) ---
     __table_args__ = (
         CheckConstraint("Amount > 0", name="chk_expense_amount_positive"),
         Index("idx_expense_user_cat_date", "UserID", "CategoryID", "TransactionDate"),
-        # Composite FK: guarantees UserID owns AccountID — rejects cross-user inserts.
         ForeignKeyConstraint(
             ["UserID", "AccountID"],
             ["BankAccounts.UserID", "BankAccounts.AccountID"],
             ondelete="CASCADE",
             name="fk_expense_user_account_composite",
         ),
-        # Composite FK: guarantees UserID owns CategoryID — rejects cross-user inserts.
         ForeignKeyConstraint(
             ["UserID", "CategoryID"],
             ["Categories.UserID", "Categories.CategoryID"],
@@ -773,28 +512,7 @@ class Expense(Base):
             f"amount={self.Amount} date={self.TransactionDate}>"
         )
 
-
-# =============================================================================
-# Model 9: MonthlyClosure
-# =============================================================================
-
 class MonthlyClosure(Base):
-    """
-    ORM model for the `MonthlyClosures` table.
-
-    Stores a historical snapshot of a BankAccount's closing balance at the
-    end of a given calendar month. Records are created by calling the
-    `CalculateMonthlyClosure` stored procedure — do not insert into this
-    table directly from the application layer.
-
-    The `UniqueConstraint` on `(AccountID, ClosurePeriod)` ensures only one
-    snapshot per account per month ever exists. The SQL procedure uses
-    ON DUPLICATE KEY UPDATE to maintain idempotency.
-
-    Relationships:
-        bank_account → BankAccount (many-to-one)
-    """
-
     __tablename__ = "MonthlyClosures"
 
     ClosureID: Mapped[int] = mapped_column(
@@ -815,12 +533,10 @@ class MonthlyClosure(Base):
         "CreatedAt", DateTime, nullable=False, server_default=func.now()
     )
 
-    # --- Relationships ---
     bank_account: Mapped["BankAccount"] = relationship(
         "BankAccount", back_populates="monthly_closures"
     )
 
-    # --- Unique Constraint (mirrors master_schemas.sql) ---
     __table_args__ = (
         UniqueConstraint(
             "AccountID", "ClosurePeriod", name="unique_account_period"
@@ -834,34 +550,7 @@ class MonthlyClosure(Base):
             f"balance={self.ClosingBalance}>"
         )
 
-
-# =============================================================================
-# Model 10: SavingGoal
-# =============================================================================
-
 class SavingGoal(Base):
-    """
-    ORM model for the `SavingGoals` table.
-
-    Represents a user-defined savings goal with a target amount and a
-    current running total. All monetary movements into and out of a goal
-    are recorded as standard Income/Expense transactions using the reserved
-    system categories 'Savings Withdraw' (Income) and 'Savings' (Expense),
-    so that SQL triggers keep BankAccounts.Balance automatically in sync.
-
-    IMPORTANT:
-        - `CurrentAmount` is managed exclusively by `saving_service.py`.
-          There are NO SQL triggers on this table.
-        - `Status` transitions are also managed by the service layer:
-            Active    → Completed : when CurrentAmount >= TargetAmount.
-            Completed → Active    : when a withdrawal drops CurrentAmount
-                                    below TargetAmount.
-        - Never mutate `CurrentAmount` or `Status` outside `saving_service.py`.
-
-    Relationships:
-        user → User (many-to-one)
-    """
-
     __tablename__ = "SavingGoals"
 
     GoalID: Mapped[int] = mapped_column(
@@ -907,10 +596,8 @@ class SavingGoal(Base):
         onupdate=func.now(),
     )
 
-    # --- Relationships ---
     user: Mapped["User"] = relationship("User", back_populates="saving_goals")
 
-    # --- Constraints + Performance Index (mirrors master_schemas.sql) ---
     __table_args__ = (
         CheckConstraint("TargetAmount > 0", name="chk_savinggoal_target_positive"),
         Index("idx_savinggoals_user", "UserID", "Status"),

@@ -7,9 +7,6 @@ from models import Category, TransactionType
 logger = logging.getLogger(__name__)
 
 def create_category(user_id: int, name: str, cat_type: str, db: Session) -> Category:
-    """
-    Creates a new custom category for the user.
-    """
     if not name or not name.strip():
         raise ValueError("Category name cannot be empty.")
         
@@ -18,7 +15,6 @@ def create_category(user_id: int, name: str, cat_type: str, db: Session) -> Cate
     except ValueError:
         raise ValueError(f"Invalid transaction type: {cat_type}. Must be 'Income' or 'Expense'.")
 
-    # Optional: check if category with same name already exists for user
     existing = db.execute(
         select(Category).where(
             Category.UserID == user_id, 
@@ -46,9 +42,6 @@ def create_category(user_id: int, name: str, cat_type: str, db: Session) -> Cate
 
 
 def delete_category(category_id: int, user_id: int, db: Session) -> None:
-    """
-    Deletes a user-owned category.
-    """
     cat = db.execute(
         select(Category).where(
             Category.CategoryID == category_id,
@@ -59,10 +52,6 @@ def delete_category(category_id: int, user_id: int, db: Session) -> None:
     if not cat:
         raise ValueError(f"Category {category_id} not found or not owned by you.")
         
-    # Check dependencies - SQLAlchemy handles cascade delete for transactions/budgets? 
-    # Actually wait: DB constraint might restrict or cascade. 
-    # To be safe, we let SQLAlchemy try, and if IntegrityError happens due to Foreign Key, we raise a user-friendly error.
-    
     try:
         db.delete(cat)
         db.commit()

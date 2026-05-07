@@ -10,8 +10,6 @@ reports_bp = Blueprint("reports", __name__)
 def get_category_spending():
     db = SessionLocal()
     try:
-        # Uses the SQL View defined in master_schemas.sql
-        # Group by CategoryName to aggregate spending across all months for the chart
         query = text("""
             SELECT CategoryName, SUM(TotalSpent) AS TotalAmount 
             FROM vw_CategoryWiseSpending 
@@ -30,8 +28,6 @@ def get_category_spending():
 def get_monthly_trend():
     db = SessionLocal()
     try:
-        # Uses the SQL View defined in master_schemas.sql
-        # Fixed column name: Month -> SummaryMonth
         query = text("SELECT SummaryMonth AS Month, TotalIncome, TotalExpense FROM vw_MonthlySummaries WHERE UserID = :user_id ORDER BY SummaryMonth ASC")
         results = db.execute(query, {"user_id": session["user_id"]}).mappings().all()
         
@@ -57,7 +53,6 @@ def add_market_watch():
         
     db = SessionLocal()
     try:
-        # Check if already watching
         existing = db.execute(
             select(MarketWatch).where(
                 MarketWatch.UserID == session["user_id"],

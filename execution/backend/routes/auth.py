@@ -16,7 +16,7 @@ def login():
         user = login_user(data["email"], data["password"], db)
         session["user_id"] = user.UserID
         session["role"] = user.Role.value
-        session["view_mode"] = "user" # Default context is always 'user'
+        session["view_mode"] = "user" 
         return jsonify({
             "status": "success",
             "message": "Login successful.",
@@ -85,9 +85,6 @@ def me():
 @auth_bp.route("/switch-mode", methods=["POST"])
 @login_required
 def switch_mode():
-    """
-    Toggles the session view_mode for Admins.
-    """
     db = SessionLocal()
     try:
         from models import User, UserRole

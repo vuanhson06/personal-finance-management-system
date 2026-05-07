@@ -63,7 +63,6 @@ def status(category_id):
             period=period,
             db=db
         )
-        # Convert Decimals to string for JSON
         status_data["remaining"] = str(status_data["remaining"])
         return jsonify({"status": "success", "message": "Budget status retrieved.", "data": status_data}), 200
     except ValueError as e:
@@ -77,7 +76,6 @@ from budget_service import get_all_budget_statuses
 @budgets_bp.route("/dashboard", methods=["GET"])
 @login_required
 def dashboard_budgets():
-    # Automatically compute current period (YYYY-MM)
     current_period = date.today().strftime("%Y-%m")
     db = SessionLocal()
     try:
@@ -87,7 +85,6 @@ def dashboard_budgets():
             db=db
         )
         
-        # Convert Decimals to string for JSON serialization
         for s in statuses:
             s["limit"] = str(s["limit"])
             s["remaining"] = str(s["remaining"])

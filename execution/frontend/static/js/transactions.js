@@ -173,31 +173,31 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load Recent Transactions
     const loadTransactions = async () => {
         try {
-            // Fetch both and merge
-            // Fetch both and merge
             const incRes = await fetch('/api/transactions/income?limit=30');
             const expRes = await fetch('/api/transactions/expense?limit=30');
-            
-            if(!incRes.ok || !expRes.ok) return;
-            
+
+            if (!incRes.ok || !expRes.ok) return;
+
             const incData = await incRes.json();
             const expData = await expRes.json();
-            
-            // Map types
-            const incomes = (incData.data || []).map(t => ({...t, type: 'Income'}));
+
+            const incomes  = (incData.data || []).map(t => ({...t, type: 'Income'}));
             const expenses = (expData.data || []).map(t => ({...t, type: 'Expense'}));
-            
-            // Sort by date desc - most recent first
+
             const merged = [...incomes, ...expenses]
-                            .sort((a, b) => new Date(b.date) - new Date(a.date))
-                            .slice(0, 30);
-            
+                .sort((a, b) => new Date(b.date) - new Date(a.date))
+                .slice(0, 30);
+
             const listHtml = merged.map(txn => {
-                const isInc = txn.type === 'Income';
-                const color = isInc ? 'var(--neu-success)' : 'var(--neu-danger)';
-                const sign = isInc ? '+' : '-';
-                const syncBadge = txn.external_trans_id ? '<span class="badge rounded-pill bg-info ms-1" style="font-size: 0.6rem; vertical-align: middle; opacity: 0.8;">Synced</span>' : '';
-                
+                const isInc    = txn.type === 'Income';
+                const color    = isInc ? 'var(--neu-success)' : 'var(--neu-danger)';
+                const sign     = isInc ? '+' : '-';
+                const syncBadge = txn.external_trans_id
+                    ? '<span class="badge rounded-pill bg-info ms-1" style="font-size:0.6rem;vertical-align:middle;opacity:0.8;">Synced</span>'
+                    : '';
+                // Safely encode txn for inline onclick
+                const txnJson = encodeURIComponent(JSON.stringify(txn));
+
                 return `
                 <div class="neu-inset transaction-item d-flex justify-content-between align-items-center">
                     <div>
@@ -207,21 +207,126 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                         <small class="text-muted">${txn.date}</small>
                     </div>
-                    <div class="display-font fs-6" style="color: ${color}; font-weight: bold;">
-                        ${sign} ${formatCurrency(txn.amount)}
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="display-font fs-6" style="color: ${color}; font-weight: bold;">
+                            ${sign} ${formatCurrency(txn.amount)}
+                        </div>
+                        <button class="txn-action-btn edit-btn" title="Edit"
+                            onclick="openEditModal(decodeURIComponent('${txnJson}'))">✎</button>
+                        <button class="txn-action-btn delete-btn" title="Delete"
+                            onclick="deleteTransaction(${txn.id}, '${txn.type}')">✖</button>
                     </div>
-                </div>
-                `;
+                </div>`;
             }).join('');
-            
-            document.getElementById('transactionsListContainer').innerHTML = listHtml || '<p class="text-muted">No transactions found.</p>';
-            
+
+            document.getElementById('transactionsListContainer').innerHTML =
+                listHtml || '<p class="text-muted">No transactions found.</p>';
+
         } catch (e) {
             console.error('Error loading txns', e);
         }
     };
 
-    // Add Account Form
+    // ── Open Edit Modal ──────────────────────────────────────────────────────
+    window.openEditModal = (txnRaw) => {
+        const txn = typeof txnRaw === 'string' ? JSON.parse(txnRaw) : txnRaw;
+
+        document.getElementById('editTxnId').value       = txn.id;
+        document.getElementById('editTxnType').value     = txn.type;
+        document.getElementById('editAmount').value      = txn.amount;
+        document.getElementById('editDate').value        = txn.date;
+        document.getElementById('editDescription').value = txn.description || '';
+
+        // Populate Account dropdown
+        fetch('/api/accounts').then(r => r.json()).then(result => {
+            const html = (result.data || []).map(a =>
+                `<option value="${a.id}" ${a.id == txn.account_id ? 'selected' : ''}>${a.name}</option>`
+            ).join('');
+            document.getElementById('editAccountSelect').innerHTML =
+                html || '<option value="">No Accounts</option>';
+        });
+
+        // Populate Category dropdown filtered by txn type
+        fetch('/api/categories').then(r => r.json()).then(result => {
+            const filtered = (result.data || []).filter(c => c.type === txn.type);
+            const html = filtered.map(c =>
+                `<option value="${c.id}" ${c.id == txn.category_id ? 'selected' : ''}>${c.name}</option>`
+            ).join('');
+            document.getElementById('editCategorySelect').innerHTML =
+                html || '<option value="">No Categories</option>';
+        });
+
+        new bootstrap.Modal(document.getElementById('editTransactionModal')).show();
+    };
+
+    // ── Edit Transaction Form Submit ─────────────────────────────────────────
+    document.getElementById('editTransactionForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id   = document.getElementById('editTxnId').value;
+        const type = document.getElementById('editTxnType').value;
+
+        const payload = {
+            amount:      document.getElementById('editAmount').value,
+            date:        document.getElementById('editDate').value,
+            description: document.getElementById('editDescription').value,
+            account_id:  parseInt(document.getElementById('editAccountSelect').value),
+            category_id: parseInt(document.getElementById('editCategorySelect').value),
+        };
+
+        const endpoint = type === 'Income'
+            ? `/api/transactions/income/${id}`
+            : `/api/transactions/expense/${id}`;
+
+        try {
+            const res = await fetch(endpoint, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            await handleApiResponse(res);
+            bootstrap.Modal.getInstance(document.getElementById('editTransactionModal'))?.hide();
+            showAlert('success', 'Updated', 'Transaction updated successfully.');
+            loadAccounts();
+            loadTransactions();
+        } catch (err) { /* handled by handleApiResponse */ }
+    });
+
+    // ── Delete Transaction ───────────────────────────────────────────────────
+    window.deleteTransaction = async (id, type) => {
+        const confirm = await Swal.fire({
+            icon: 'warning',
+            title: 'Delete Transaction?',
+            text: 'This action cannot be undone.',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, Delete',
+            confirmButtonColor: '#FF2157',
+            cancelButtonText: 'Cancel',
+            background: '#E7E5E4',
+            color: '#1E2938',
+            customClass: { popup: 'neu-outset' }
+        });
+        if (!confirm.isConfirmed) return;
+
+        const endpoint = type === 'Income'
+            ? `/api/transactions/income/${id}`
+            : `/api/transactions/expense/${id}`;
+
+        try {
+            const res  = await fetch(endpoint, { method: 'DELETE' });
+            const data = await res.json();
+            if (res.ok) {
+                showAlert('success', 'Deleted', 'Transaction removed successfully.');
+                loadAccounts();
+                loadTransactions();
+            } else {
+                showAlert('error', 'Error', data.message || 'Failed to delete.');
+            }
+        } catch (err) {
+            console.error('Delete error', err);
+        }
+    };
+
+    // ── Add Account Form ─────────────────────────────────────────────────────
     document.getElementById('addAccountForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const data = Object.fromEntries(new FormData(e.target).entries());
@@ -234,22 +339,18 @@ document.addEventListener('DOMContentLoaded', () => {
             await handleApiResponse(res);
             showAlert('success', 'Success', 'Account added successfully.');
             e.target.reset();
-            loadAccounts(); // refresh
-        } catch (e) {
-            // error handled by handleApiResponse
-        }
+            loadAccounts();
+        } catch (e) { /* handled */ }
     });
 
-    // Add Transaction Form
+    // ── Add Transaction Form ─────────────────────────────────────────────────
     document.getElementById('addTransactionForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const data = Object.fromEntries(new FormData(e.target).entries());
-        const type = data.type; // 'Income' or 'Expense'
+        const type = data.type;
         const endpoint = type === 'Income' ? '/api/transactions/income' : '/api/transactions/expense';
-        
-        // Remove type so it doesn't break backend payload
         delete data.type;
-        
+
         try {
             const res = await fetch(endpoint, {
                 method: 'POST',
@@ -259,21 +360,15 @@ document.addEventListener('DOMContentLoaded', () => {
             await handleApiResponse(res);
             showAlert('success', 'Success', 'Transaction recorded successfully.');
             e.target.reset();
-            
-            // Refresh lists
             loadAccounts();
             loadTransactions();
-            updateCategoryDropdown(); // reset select
-        } catch (e) {
-            // error handled by handleApiResponse (especially 422)
-        }
+            updateCategoryDropdown();
+        } catch (e) { /* handled by handleApiResponse */ }
     });
 
-    // Init
+    // ── Init ─────────────────────────────────────────────────────────────────
     loadAccounts();
     loadCategories();
     loadTransactions();
-    
-    // Set default date to today
     document.querySelector('input[name="date"]').valueAsDate = new Date();
 });
